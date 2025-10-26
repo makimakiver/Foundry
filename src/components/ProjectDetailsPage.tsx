@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -39,6 +39,9 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { useCurrentAccount } from "@mysten/dapp-kit";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { getFullnodeUrl } from "@mysten/sui/client";
+import { walrus } from "@mysten/walrus";
 // Note: We use parent-provided navigation instead of react-router.
 
 interface ProjectDetailsPageProps {
@@ -53,18 +56,56 @@ interface ProjectDetailsPageProps {
     backers: number;
     daysLeft: number;
     status: "live" | "upcoming" | "funded";
+    detailsBlobId?: string;
+    details?: any;
   };
   onBack: () => void;
 }
 
 export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps) {
+  console.log('Project: ',project.id);
   const currentAccount = useCurrentAccount();
+  const walrusClient = useMemo(() => new SuiJsonRpcClient({
+    url: getFullnodeUrl('testnet'),
+    network: 'testnet',
+  }).$extend(
+    walrus({
+      uploadRelay: {
+        host: 'https://upload-relay.testnet.walrus.space',
+        sendTip: { max: 1_000 },
+      },
+      wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
+    })
+  ), []);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showAddJobDialog, setShowAddJobDialog] = useState(false);
   const [showJobApplicationDialog, setShowJobApplicationDialog] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null);
   const [projectJobs, setProjectJobs] = useState<JobRequest[]>([]);
+  const [details, setDetails] = useState<any | null>(project.details ?? null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    async function loadDetails() {
+      if (!project.details && project.detailsBlobId) {
+        try {
+          setLoadingDetails(true);
+          // const blob = await walrusClient.walrus.readBlob({ blobId: project.detailsBlobId });
+          // const parsed = typeof blob === 'string' ? JSON.parse(blob) : JSON.parse(String(blob));
+          // console.log(parsed.text());
+          if (mounted) setDetails(parsed);
+        } catch (e) {
+          console.warn('Failed to load project details blob', e);
+        } finally {
+          if (mounted) setLoadingDetails(false);
+        }
+      }
+    }
+    loadDetails();
+    return () => { mounted = false };
+  }, [project.details, project.detailsBlobId, walrusClient]);
   const fundingPercentage = (project.currentFunding / project.fundingGoal) * 100;
+  const mergedDescription = project.description || details?.description || "";
 
   const statusConfig = {
     live: { color: "bg-[#00FFA3]", text: "Live Now" },
@@ -357,7 +398,7 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                   <Card className="p-6 bg-card/80 border-border backdrop-blur-sm">
                     <h2 className="text-2xl text-foreground mb-4">About This Project</h2>
                     <p className="text-muted-foreground leading-relaxed mb-6">
-                      {project.description}
+                      {loadingDetails && !mergedDescription ? 'Loading details…' : mergedDescription}
                     </p>
                     <p className="text-muted-foreground leading-relaxed mb-4">
                       This groundbreaking project represents the future of decentralized technology. 
@@ -863,6 +904,7 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         projectName={project.name}
+        projectId={project.id}
         isWalletConnected={currentAccount ? true : false}
       />
 

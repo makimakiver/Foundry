@@ -7,87 +7,12 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Search, SlidersHorizontal, Rocket, TrendingUp, Users, Target } from "lucide-react";
 import { motion } from "motion/react";
-import bgImage from "../assets/background_2.jpeg";
+import bgImage from "../assets/background4.jpeg";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { walrus } from "@mysten/walrus";
 
-const mockProjects = [
-  {
-    id: "1",
-    name: "defi-analytics.sui",
-    description: "Real-time analytics and insights for decentralized finance protocols. Track your portfolio across multiple chains with AI-powered predictions.",
-    category: "DeFi",
-    image: "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxibG9ja2NoYWluJTIwbmV0d29ya3xlbnwxfHx8fDE3NjEzMjE5ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 500000,
-    currentFunding: 387500,
-    backers: 234,
-    daysLeft: 12,
-    status: "live" as const,
-  },
-  {
-    id: "2",
-    name: "ai-code-assistant.sui",
-    description: "Next-generation AI pair programmer that understands your codebase. Built on open-source LLMs with privacy-first architecture.",
-    category: "AI/ML",
-    image: "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhaSUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzYxMjg2NDc4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 750000,
-    currentFunding: 625000,
-    backers: 412,
-    daysLeft: 8,
-    status: "live" as const,
-  },
-  {
-    id: "3",
-    name: "creator-economy.sui",
-    description: "Decentralized platform empowering creators with fair monetization, NFT integration, and community governance tools.",
-    category: "DAO",
-    image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0ZWNoJTIwc3RhcnR1cHxlbnwxfHx8fDE3NjEyODE2ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 1000000,
-    currentFunding: 1200000,
-    backers: 856,
-    daysLeft: 0,
-    status: "funded" as const,
-  },
-  {
-    id: "4",
-    name: "zk-privacy.sui",
-    description: "Zero-knowledge proof infrastructure for privacy-preserving applications. Enterprise-ready with easy integration SDKs.",
-    category: "Infrastructure",
-    image: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjB3b3Jrc3BhY2V8ZW58MXx8fHwxNzYxMzA1NjI4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 2000000,
-    currentFunding: 450000,
-    backers: 167,
-    daysLeft: 25,
-    status: "live" as const,
-  },
-  {
-    id: "5",
-    name: "crosschain-dex.sui",
-    description: "Seamless token swaps across 15+ blockchains with the lowest fees. Powered by advanced AMM algorithms.",
-    category: "DeFi",
-    image: "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxibG9ja2NoYWluJTIwbmV0d29ya3xlbnwxfHx8fDE3NjEzMjE5ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 1500000,
-    currentFunding: 890000,
-    backers: 523,
-    daysLeft: 15,
-    status: "live" as const,
-  },
-  {
-    id: "6",
-    name: "nft-gaming.sui",
-    description: "Trade, rent, and lease gaming NFTs with built-in escrow and reputation system. Supporting 100+ games.",
-    category: "Gaming",
-    image: "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhaSUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzYxMjg2NDc4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 600000,
-    currentFunding: 150000,
-    backers: 89,
-    daysLeft: 45,
-    status: "upcoming" as const,
-  },
-];
-
-interface Project {
+class Project {
   id: string;
   name: string;
   description: string;
@@ -98,6 +23,49 @@ interface Project {
   backers: number;
   daysLeft: number;
   status: "live" | "upcoming" | "funded";
+  detailsBlobId?: string;
+  details?: any;
+
+  constructor({
+    id,
+    name,
+    description,
+    category,
+    image,
+    fundingGoal,
+    currentFunding = 0,
+    backers = 0,
+    daysLeft = 30,
+    status = "live",
+    detailsBlobId,
+    details,
+  }: {
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    image: string;
+    fundingGoal: number;
+    currentFunding?: number;
+    backers?: number;
+    daysLeft?: number;
+    status?: "live" | "upcoming" | "funded";
+    detailsBlobId?: string;
+    details?: any;
+  }) {
+    this.id = id;
+    this.name = name;
+    this.description = description;
+    this.category = category;
+    this.image = image;
+    this.fundingGoal = fundingGoal;
+    this.currentFunding = currentFunding;
+    this.backers = backers;
+    this.daysLeft = daysLeft;
+    this.status = status;
+    this.detailsBlobId = detailsBlobId;
+    this.details = details;
+  }
 }
 
 interface ProjectsPageProps {
@@ -121,25 +89,51 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
       wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
     }),
   );
-  const [projects, setProjects] = useState<any[]>([]);
+  
+  const [projects, setProjects] = useState<Project[]>([]);
   const fetchProjects = async () => {
-    const project_struct = await client.getObject({
-      options: {
-        showContent: true,
-      },
-      id: projectId
-    })
-    console.log(project_struct.data?.content?.fields?.ideas);
-    const projects = project_struct.data?.content?.fields?.ideas;
-    for(const project of projects) {
-      console.log(project);
-      const details_blob = project.fields?.details.fields?.blob_id;
-      const blob = await client.walrus.readBlob({ blobId: "b344e2912ef5ea87d9c17bf9da77eb49746b27ddc454f4396fe35a8b1b888e78" });
-      const details = JSON.parse(blob);
-      console.log(details);
+    try {
+      const project_struct = await client.getObject({
+        options: { showContent: true },
+        id: projectId,
+      });
+      const ideas: any[] = (project_struct as any)?.data?.content?.fields?.ideas ?? [];
+      const parsed: Project[] = [];
+      if (Array.isArray(ideas)) {
+        for (let i = 0; i < ideas.length; i++) {
+          const idea = ideas[i];
+          const idea_struct = await client.getObject({
+            options: { showContent: true },
+            id: idea,
+          });
+          const idea_struct_fields: any[] = (idea_struct as any)?.data?.content?.fields ?? idea_struct;
+          console.log(idea_struct_fields);
+          const f = idea_struct.data;
+          // Try to fetch details blob (optional)
+          console.log('project_id: ', f?.id);
+          const p = new Project({
+            id: String(f?.id?.id ?? f?.uid ?? `${projectId}-${i}`),
+            name: String(f?.title ?? ''),
+            description: String(''),
+            category: String(f?.category ?? 'DeFi'),
+            image: String(f?.image ?? ''),
+            fundingGoal: Number(f?.fundingGoal ?? f?.funding_goal ?? 0),
+            currentFunding: 0,
+            backers: 0,
+            daysLeft: 30,
+            status: 'live',
+            detailsBlobId: String(f?.blob_id ?? ''),
+          });
+          parsed.push(p);
+        }
+      }
+      setProjects(parsed);
+      return parsed;
+    } catch (e) {
+      console.error('Failed to fetch projects', e);
+      setProjects([]);
+      return [];
     }
-    setProjects(projects);
-    return projects;
   }
 
   useEffect(() => {
@@ -161,9 +155,8 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
     return `${name.toLowerCase().replace(/\s+/g, '-')}.sui`;
   };
 
-  // Use real blockchain projects if available, otherwise fall back to mock projects
   // Transform all project names to SuiNS format for consistent display
-  const allProjects = (projects.length > 0 ? projects : mockProjects).map(project => ({
+  const allProjects = projects.map(project => ({
     ...project,
     name: ensureSuiNSFormat(project.name),
     originalName: project.name // Keep original for reference
@@ -184,7 +177,7 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
         <img
           src={bgImage}
           alt="Banner background"
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute top-0 left-0 right-0 bottom-0 w-70 h-70 object-cover origin-center scale-80 sm:scale-90 lg:scale-90"
         />
         <div className="absolute inset-0 bg-black/40" />
 

@@ -9,6 +9,7 @@ import { Toaster } from "./components/ui/sonner";
 import { WalletProvider, useWallet } from "./contexts/WalletContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { toast } from "sonner@2.0.3";
+import { useCurrentAccount } from "@mysten/dapp-kit";
 
 type Page = "projects" | "launch" | "stats" | "project-details";
 
@@ -29,9 +30,9 @@ function AppContent() {
   const { isConnected, walletAddress, connect, disconnect } = useWallet();
   const [currentPage, setCurrentPage] = useState<Page>("projects");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-
+  const currentAccount = useCurrentAccount();
   const navigateToLaunch = () => {
-    if (!isConnected) {
+    if (!currentAccount) {
       toast.error("Please connect your wallet to launch a project");
       return;
     }
@@ -75,7 +76,6 @@ function AppContent() {
           <ProjectDetailsPage 
             project={selectedProject}
             onBack={handleBackToProjects}
-            isWalletConnected={isConnected}
           />
         )}
         {currentPage === "launch" && (

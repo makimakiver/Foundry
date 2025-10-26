@@ -38,6 +38,8 @@ import {
   Lock,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "./ui/avatar";
+import { useCurrentAccount } from "@mysten/dapp-kit";
+// Note: We use parent-provided navigation instead of react-router.
 
 interface ProjectDetailsPageProps {
   project: {
@@ -53,11 +55,10 @@ interface ProjectDetailsPageProps {
     status: "live" | "upcoming" | "funded";
   };
   onBack: () => void;
-  isWalletConnected?: boolean;
 }
 
-export function ProjectDetailsPage({ project, onBack, isWalletConnected = false }: ProjectDetailsPageProps) {
-  const { isConnected, walletAddress } = useWallet();
+export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps) {
+  const currentAccount = useCurrentAccount();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showAddJobDialog, setShowAddJobDialog] = useState(false);
   const [showJobApplicationDialog, setShowJobApplicationDialog] = useState(false);
@@ -79,7 +80,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
       maximumFractionDigits: 0,
     }).format(amount);
   };
-
+  const account = useCurrentAccount();
   // Mock data for detailed information
   const teamMembers = [
     { name: "Sarah Chen", role: "Founder & CEO", avatar: "SC" },
@@ -201,20 +202,20 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
   ];
 
   const checkCanPostJobs = (): boolean => {
-    if (!isConnected || !walletAddress) {
+    if (!currentAccount) {
       return false;
     }
     
     // Check if the connected wallet is a team member with job posting permission
     const userMember = projectTeamMembers.find(m => 
-      m.address.toLowerCase() === walletAddress.toLowerCase()
+      m.address.toLowerCase() === currentAccount.address.toLowerCase()
     );
     
     return userMember ? userMember.permissions.includes("Post jobs") : false;
   };
 
   const handleAddJob = () => {
-    if (!isConnected) {
+    if (!currentAccount) {
       toast.error("Please connect your wallet to post a job");
       return;
     }
@@ -232,7 +233,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
   };
 
   const handleApplyClick = (job: JobRequest) => {
-    if (!isConnected) {
+    if (!currentAccount) {
       toast.error("Please connect your wallet to apply for this job");
       return;
     }
@@ -269,7 +270,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
         </motion.div>
 
         {/* Wallet Connection Banner for Job Posting */}
-        {!isConnected && (
+        {!currentAccount && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -687,7 +688,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-xl text-foreground mb-1">Job Requests</h3>
-                    {!isConnected ? (
+                    {!currentAccount ? (
                       <p className="text-sm text-[#FF6B00]">Connect wallet to view & post jobs</p>
                     ) : checkCanPostJobs() ? (
                       <p className="text-sm text-[#00FFA3]">You can post jobs for this project</p>
@@ -695,7 +696,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
                       <p className="text-sm text-muted-foreground">View-only access</p>
                     )}
                   </div>
-                  {isConnected && (
+                  {currentAccount && (
                     <div className="flex items-center gap-3">
                       <Badge className="bg-[#00E0FF]/20 text-[#00E0FF] border-[#00E0FF]/30">
                         {allJobs.filter(j => j.status === "Open").length} Open
@@ -714,7 +715,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
                   )}
                 </div>
                 <div className="space-y-3">
-                  {!isConnected ? (
+                  {!currentAccount ? (
                     <div className="relative">
                       {/* Blurred Job Cards Background */}
                       <div className="absolute inset-0 blur-md opacity-40 pointer-events-none">
@@ -862,7 +863,7 @@ export function ProjectDetailsPage({ project, onBack, isWalletConnected = false 
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         projectName={project.name}
-        isWalletConnected={isWalletConnected}
+        isWalletConnected={currentAccount ? true : false}
       />
 
       {/* Add Job Request Dialog */}

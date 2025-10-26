@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ProjectCard } from "./ProjectCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Input } from "./ui/input";
@@ -7,6 +7,9 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Search, SlidersHorizontal, Rocket, TrendingUp, Users, Target } from "lucide-react";
 import { motion } from "motion/react";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { getFullnodeUrl } from "@mysten/sui/client";
+import { walrus } from "@mysten/walrus";
 
 const mockProjects = [
   {
@@ -102,6 +105,45 @@ interface ProjectsPageProps {
 }
 
 export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPageProps) {
+  const projectId = import.meta.env.VITE_REGISTRY_ID;
+  const client = new SuiJsonRpcClient({
+    url: getFullnodeUrl('testnet'),
+    network: 'testnet',
+  }).$extend(
+    walrus({
+      uploadRelay: {
+        host: 'https://upload-relay.testnet.walrus.space',
+        sendTip: {
+          max: 1_000,
+        },
+      },     
+      wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
+    }),
+  );
+  const [projects, setProjects] = useState<any[]>([]);
+  const fetchProjects = async () => {
+    const project_struct = await client.getObject({
+      options: {
+        showContent: true,
+      },
+      id: projectId
+    })
+    console.log(project_struct.data?.content?.fields?.ideas);
+    const projects = project_struct.data?.content?.fields?.ideas;
+    for(const project of projects) {
+      console.log(project);
+      const details_blob = project.fields?.details.fields?.blob_id;
+      const blob = await client.walrus.readBlob({ blobId: "b344e2912ef5ea87d9c17bf9da77eb49746b27ddc454f4396fe35a8b1b888e78" });
+      const details = JSON.parse(blob);
+      console.log(details);
+    }
+    setProjects(projects);
+    return projects;
+  }
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 

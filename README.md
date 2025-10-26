@@ -6,11 +6,13 @@ This is a Web3 crowdfunding and project launch platform built on the Sui blockch
 
 - 🚀 **Project Launch**: Multi-step wizard for launching blockchain projects
 - 💰 **Crowdfunding**: Support projects with tiered or custom backing
-- 🔗 **SuiNS Integration**: Automatic `.sui` domain registration for projects
+- 🔗 **SuiNS Integration**: **Mandatory** `.sui` domain registration for all projects
 - 💼 **Job Marketplace**: Post and apply for project-related jobs
 - 📊 **Analytics Dashboard**: Track project performance and funding
 - 🌐 **Walrus Storage**: Decentralized metadata storage
 - 🎨 **Modern UI**: Built with Radix UI and Tailwind CSS
+
+> **⚠️ Important**: SuiNS registration is now **mandatory** for project submission. If SuiNS registration fails, the entire project submission will be cancelled to prevent data inconsistency. See [MANDATORY_SUINS_FLOW_CONTROL.md](./MANDATORY_SUINS_FLOW_CONTROL.md) for details.
 
 ## Technology Stack
 
@@ -75,6 +77,14 @@ For detailed documentation on the SuiNS integration, see [SUINS_INTEGRATION.md](
 - **NFT Transfer**: Automatic transfer to project founder
 - **Error Handling**: Comprehensive non-blocking error handling
 - **Batch Processing**: Efficient team member registration with rate limiting
+- **Input Validation**: Multi-layered validation to prevent TypeError issues
+
+### Important Documentation:
+- 🚨 [MANDATORY_SUINS_FLOW_CONTROL.md](./MANDATORY_SUINS_FLOW_CONTROL.md) - **CRITICAL: Mandatory SuiNS registration flow control**
+- 📘 [SUINS_VALIDATION_ENHANCEMENT.md](./SUINS_VALIDATION_ENHANCEMENT.md) - **Preventing "TypeError: Invalid string value: undefined"**
+- 📋 [VALIDATION_QUICK_REFERENCE.md](./VALIDATION_QUICK_REFERENCE.md) - Quick troubleshooting guide
+- 📚 [SUINS_INTEGRATION.md](./SUINS_INTEGRATION.md) - Complete integration details
+- 🔧 [TEAM_SUBNAMES_DOCUMENTATION.md](./TEAM_SUBNAMES_DOCUMENTATION.md) - Team subnames feature
 
 ### Team Subnames
 Each team member automatically gets a subname in the format `{projectName}.{memberRole}`:
@@ -127,6 +137,17 @@ Foundry/
 ## Support
 
 For issues or questions:
+
+### Common Errors
+
+**"TypeError: Invalid string value: undefined"**
+- See [VALIDATION_QUICK_REFERENCE.md](./VALIDATION_QUICK_REFERENCE.md) for immediate troubleshooting
+- Check [SUINS_VALIDATION_ENHANCEMENT.md](./SUINS_VALIDATION_ENHANCEMENT.md) for detailed explanation
+- Ensure wallet is connected before submitting project
+- Verify project name is not empty
+
+### General Troubleshooting
 - Check the [SUINS_INTEGRATION.md](./SUINS_INTEGRATION.md) for SuiNS-related issues
-- Review console logs for detailed error messages
-- Ensure environment variables are configured correctly
+- Review browser console logs for detailed error messages
+- Ensure environment variables are configured correctly (see [ENV_SETUP_GUIDE.md](./ENV_SETUP_GUIDE.md))
+- Verify wallet connection status

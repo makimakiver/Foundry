@@ -34,16 +34,10 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# Documentation (generated/implementation docs)
-SUINS_INTEGRATION.md
-IMPLEMENTATION_SUMMARY.md
-FLOW_DIAGRAM.md
-IMPLEMENTATION_CHECKLIST.md
-QUICK_START.md
-TEAM_SUBNAMES_DOCUMENTATION.md
-TEAM_SUBNAMES_SUMMARY.md
+# Documentation - Ignore all .md files except README
+*.md
 
-# Keep the main README
+# Keep the main README files
 !README.md
 !README copy.md
 

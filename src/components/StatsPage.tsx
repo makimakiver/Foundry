@@ -70,7 +70,7 @@ import { toast } from "sonner@2.0.3";
 const userProjects = [
   {
     id: 1,
-    name: "DeFi Analytics Platform",
+    name: "defi-analytics.sui",
     category: "DeFi",
     status: "Live",
     image: "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=400",
@@ -98,7 +98,7 @@ const userProjects = [
   },
   {
     id: 2,
-    name: "AI Code Assistant",
+    name: "ai-code-assistant.sui",
     category: "AI/ML",
     status: "Live",
     image: "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400",
@@ -127,7 +127,7 @@ const userProjects = [
   },
   {
     id: 3,
-    name: "Creator Economy DAO",
+    name: "creator-economy.sui",
     category: "DAO",
     status: "Funded",
     image: "https://images.unsplash.com/photo-1618044733300-9472054094ee?w=400",
@@ -154,7 +154,7 @@ const userProjects = [
   },
   {
     id: 4,
-    name: "ZK Privacy Protocol",
+    name: "zk-privacy.sui",
     category: "Infrastructure",
     status: "Live",
     image: "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=400",

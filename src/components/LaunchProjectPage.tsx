@@ -134,45 +134,45 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       
       // Step 1: Prepare and upload project metadata to Walrus
       toast.loading('Preparing project metadata...');
-      const json = JSON.stringify(data);
+    const json = JSON.stringify(data);
       const fileData = new TextEncoder().encode(json);
       
-      const flow = client.walrus.writeFilesFlow({
-        files: [
-          WalrusFile.from({
-            contents: new Uint8Array(fileData),
+    const flow = client.walrus.writeFilesFlow({
+      files: [
+        WalrusFile.from({
+          contents: new Uint8Array(fileData),
             identifier: `${data.name}-metadata.json`,
-          }),
-        ],
-      });
+        }),
+      ],
+    });
       
-      await flow.encode();
+    await flow.encode();
       
-      const registerTx = flow.register({
-        epochs: 3,
-        owner: currentAccount.address,
-        deletable: true,
-      });
+    const registerTx = flow.register({
+      epochs: 3,
+      owner: currentAccount.address,
+      deletable: true,
+    });
       
-      const { digest } = await signAndExecuteTransaction({ transaction: registerTx });
+    const { digest } = await signAndExecuteTransaction({ transaction: registerTx });
       
       // Step 2: Upload the data to storage nodes
       toast.dismiss();
       toast.loading('Uploading metadata to Walrus...');
-      await flow.upload({ digest });
+    await flow.upload({ digest });
       
-      const info = await client.getTransactionBlock({
-        digest, 
-        options: { showObjectChanges: true }
-      });
+    const info = await client.getTransactionBlock({
+      digest, 
+      options: { showObjectChanges: true }
+    });
       
-      const blobChange =
-        info?.objectChanges?.find(
-          (o: any) =>
-            o.type === 'created' &&
-            ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
-        ) ?? null;
-      const blob_objectId = blobChange?.objectId;
+    const blobChange =
+      info?.objectChanges?.find(
+        (o: any) =>
+          o.type === 'created' &&
+          ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
+      ) ?? null;
+    const blob_objectId = blobChange?.objectId;
       
       // Validate blob creation
       if (!blob_objectId) {
@@ -182,20 +182,125 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       toast.dismiss();
       toast.success('Metadata uploaded successfully!');
       
-      // Step 3: Register primary SuiNS name for the project
-      console.log('Registering SuiNS name for project:', data.name);
-      const suinsResult = await handleSuiNameRegistration(
-        data.name,
-        currentAccount.address,
-        suinsClient,
-        signAndExecuteTransaction,
-        client // Pass client to extract NFT object ID
-      );
+      // ========================================================================
+      // Step 3: MANDATORY SuiNS Registration (CRITICAL - Project submission depends on this)
+      // ========================================================================
+      // If SuiNS registration fails, the entire project submission will be cancelled
+      // to prevent InvalidBCSBytes errors and ensure data consistency
       
-      if (!suinsResult.success) {
-        console.warn('SuiNS registration failed, but continuing with project creation:', suinsResult.error);
-        toast.warning('Project created but SuiNS registration failed. You can register the name later.');
+      console.log('========================================');
+      console.log('STEP 3: MANDATORY SuiNS REGISTRATION');
+      console.log('========================================');
+      
+      // Extract founder address from connected account
+      const founderAddress = currentAccount?.address;
+      
+      // Pre-submission validation: Ensure founder address is available
+      if (!founderAddress || typeof founderAddress !== 'string' || founderAddress.trim().length === 0) {
+        const errorMsg = 'Wallet address is not available. Please ensure your wallet is properly connected before submitting a project.';
+        console.error('❌ CRITICAL ERROR:', errorMsg);
+        console.error('   Current Account:', currentAccount);
+        console.error('   Founder Address:', founderAddress);
+        toast.dismiss();
+        toast.error('Wallet not connected properly. Please reconnect your wallet and try again.');
+        return; // STOP - Cannot proceed without wallet address
       }
+      
+      // Validate project name
+      const projectName = data.name;
+      if (!projectName || projectName.trim().length === 0) {
+        const errorMsg = 'Project name is required for SuiNS registration and project submission.';
+        console.error('❌ CRITICAL ERROR:', errorMsg);
+        toast.dismiss();
+        toast.error('Project name is required. Please provide a project name.');
+        return; // STOP - Cannot proceed without project name
+      }
+      
+      // Log pre-registration details
+      console.log('Pre-Registration Validation:');
+      console.log('  ✓ Project Name:', projectName);
+      console.log('  ✓ Founder Address:', founderAddress);
+      console.log('  ✓ SuinsClient:', suinsClient ? 'Initialized' : 'Missing');
+      console.log('  ✓ Blob Object ID:', blob_objectId);
+      
+      // Call SuiNS registration function with validated parameters
+      console.log('Calling handleSuiNameRegistration...');
+      console.log('Parameters being passed:');
+      console.log('  - projectName:', projectName, '(type:', typeof projectName, ')');
+      console.log('  - founderAddress:', founderAddress, '(type:', typeof founderAddress, ')');
+      console.log('  - suinsClient:', suinsClient);
+      console.log('  - signAndExecuteTransaction:', typeof signAndExecuteTransaction);
+      console.log('  - client:', client);
+      
+      let registrationSuccess = false;
+      let suinsResult;
+      
+      try {
+        // Wrap signAndExecuteTransaction to ensure proper parameter handling
+        const wrappedSignAndExecute = async (params: { transaction: Transaction; chain?: string }) => {
+          console.log('🔄 Executing transaction with params:', params);
+          try {
+            const result = await signAndExecuteTransaction(params);
+            console.log('✅ Transaction executed successfully:', result);
+            return result;
+          } catch (txError) {
+            console.error('❌ Transaction execution failed:', txError);
+            throw txError;
+          }
+        };
+        
+        suinsResult = await handleSuiNameRegistration(
+          projectName,
+          founderAddress,
+          suinsClient,
+          wrappedSignAndExecute,
+          client // Pass client to extract NFT object ID
+        );
+        
+        registrationSuccess = suinsResult.success;
+        console.log('SuiNS registration result:', suinsResult);
+        
+      } catch (error) {
+        console.error('❌ SuiNS registration threw an exception:', error);
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        registrationSuccess = false;
+        suinsResult = {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error during SuiNS registration'
+        };
+      }
+      
+      // ========================================================================
+      // CRITICAL EXIT POINT: Enforce mandatory SuiNS registration
+      // ========================================================================
+      if (!registrationSuccess) {
+        console.error('========================================');
+        console.error('❌ SUINS REGISTRATION FAILED');
+        console.error('========================================');
+        console.error('Project submission CANCELLED to prevent data inconsistency');
+        console.error('Error details:', suinsResult?.error);
+        console.error('========================================');
+        
+        toast.dismiss();
+        toast.error(
+          `Project submission cancelled: SuiNS registration failed. ${suinsResult?.error || 'Please try again.'}`,
+          { duration: 6000 }
+        );
+        
+        // STOP - Do not proceed with project submission
+        return;
+      }
+      
+      // ========================================================================
+      // SUCCESS: SuiNS registration completed successfully
+      // ========================================================================
+      console.log('========================================');
+      console.log('✅ SUINS REGISTRATION SUCCESSFUL');
+      console.log('========================================');
+      console.log('  Transaction Digest:', suinsResult.digest);
+      console.log('  NFT Object ID:', suinsResult.nftObjectId);
+      console.log('  Proceeding with project submission...');
+      console.log('========================================');
       
       // Step 3.5: Register team member subnames (if primary registration succeeded)
       if (suinsResult.success && suinsResult.nftObjectId && data.teamMembers && data.teamMembers.length > 0) {
@@ -235,19 +340,19 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           const tx = new Transaction();
           const suinsTx = new SuinsTransaction(suinsClient, tx);
           
-          const subNameNft = suinsTx.createSubName({
-            parentNft: tx.object(foundry),
-            name: data.name,
-            expirationTimestampMs: 1735132800000,
-            allowChildCreation: true,
-            allowTimeExtension: true,
-          });
+    const subNameNft = suinsTx.createSubName({
+        parentNft: tx.object(foundry),
+        name: data.name,
+        expirationTimestampMs: 1735132800000,
+        allowChildCreation: true,
+        allowTimeExtension: true,
+    });
           
-          suinsTx.createLeafSubName({
-            parentNft: subNameNft,
-            name: "founder",
-            targetAddress: currentAccount.address,
-          });
+    suinsTx.createLeafSubName({
+        parentNft: subNameNft,
+        name: "founder",
+        targetAddress: currentAccount.address,
+    });
           
           await signAndExecuteTransaction({
             transaction: tx,
@@ -270,47 +375,54 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
         throw new Error('Blob object ID is missing. Cannot submit project.');
       }
       
+      // Generate the SuiNS name (same sanitization as used in SuiNS registration)
+      const suinsName = `${projectName.toLowerCase().replace(/\s+/g, '-')}.sui`;
+      console.log('Submitting project with SuiNS name:', suinsName);
+      
       const tx = new Transaction();
       
       // Split coins for funding goal
       const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
       
       // Call the smart contract to register the project
-      tx.moveCall({
+      // Note: This assumes the smart contract has been updated to accept the SuiNS name parameter
+      // If the contract hasn't been updated yet, you'll need to update it to accept this additional parameter
+    tx.moveCall({
         target: `${vendor}::ideation::suggest_idea`,
         arguments: [
           tx.object(registry),
-          tx.pure.string(data.name),
+          tx.pure.string(data.name),           // Original project name
+          tx.pure.string(suinsName),           // SuiNS name (e.g., "my-project.sui")
           tx.object(blob_objectId),
-          tx.pure.string(data.image || ''), // Provide empty string as fallback
+          tx.pure.string(data.image || ''),    // Provide empty string as fallback
           coin
         ]
       });
       
-      signAndExecuteTransaction(
-        {
-          transaction: tx,
-          chain: 'sui:testnet',
-        },
-        {
-          onSuccess: (result) => {
+    signAndExecuteTransaction(
+      {
+        transaction: tx,
+        chain: 'sui:testnet',
+      },
+      {
+        onSuccess: (result) => {
             console.log('Project submitted successfully:', result);
             toast.dismiss();
-            toast.success(
-              `Project submitted for review! (${historyVisibility === "public" ? "Public" : "Private"} history)`
-            );
+          toast.success(
+            `Project submitted for review! (${historyVisibility === "public" ? "Public" : "Private"} history)`
+          );
             console.log("Investment history visibility:", historyVisibility);
             
             // Redirect to projects page
-            onProjectSubmitted();
-          },
-          onError: (err) => {
+          onProjectSubmitted();
+        },
+        onError: (err) => {
             console.error('Project submission error:', err);
             toast.dismiss();
             toast.error('Failed to submit project. Please try again.');
-          }
-        },
-      );
+        }
+      },
+    );
     } catch (error) {
       console.error('Error during project submission:', error);
       toast.dismiss();

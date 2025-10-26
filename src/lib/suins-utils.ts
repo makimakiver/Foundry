@@ -5,15 +5,20 @@ import { toast } from "sonner@2.0.3";
 /**
  * Handles the primary Sui Name Service (SuiNS) registration for a project
  * 
+ * This function explicitly validates all required parameters to prevent the
+ * "TypeError: Invalid string value: undefined" error that can occur when
+ * undefined values are passed to the Sui transaction builder.
+ * 
  * @param projectName - The name of the project to register (will be used as the SuiNS name)
- * @param founderAddress - The Sui address of the project founder
+ * @param ownerAddress - The Sui address of the project founder/owner (REQUIRED)
  * @param suinsClient - The initialized SuinsClient instance
  * @param signAndExecuteTransaction - Function to sign and execute the transaction
+ * @param client - Optional Sui client for querying transaction results
  * @returns Promise<{ success: boolean; nftObjectId?: string; digest?: string; error?: string }>
  */
 export async function handleSuiNameRegistration(
   projectName: string,
-  founderAddress: string,
+  ownerAddress: string,
   suinsClient: SuinsClient,
   signAndExecuteTransaction: (params: {
     transaction: Transaction;
@@ -22,14 +27,73 @@ export async function handleSuiNameRegistration(
   client?: any // Optional Sui client for querying transaction results
 ): Promise<{ success: boolean; nftObjectId?: string; digest?: string; error?: string }> {
   try {
-    // Validate inputs
-    if (!projectName || projectName.trim().length === 0) {
-      throw new Error("Project name is required for SuiNS registration");
+    // ========================================
+    // CRITICAL VALIDATION: Prevent TypeError
+    // ========================================
+    // This validation prevents the "TypeError: Invalid string value: undefined" 
+    // error that occurs when undefined values are passed to tx.pure.address()
+    
+    // Validate projectName
+    if (!projectName || typeof projectName !== 'string' || projectName.trim().length === 0) {
+      const error = "Project name is required and must be a non-empty string for SuiNS registration";
+      console.error('❌ SuiNS Registration Error:', error);
+      console.error('   Received projectName:', projectName, 'Type:', typeof projectName);
+      toast.error(error);
+      return {
+        success: false,
+        error,
+      };
     }
 
-    if (!founderAddress) {
-      throw new Error("Founder address is required for SuiNS registration");
+    // Validate ownerAddress (CRITICAL - prevents TypeError)
+    if (!ownerAddress || typeof ownerAddress !== 'string' || ownerAddress.trim().length === 0) {
+      const error = "Owner address is required and must be a valid string for SuiNS registration. This prevents TypeError: Invalid string value: undefined.";
+      console.error('❌ SuiNS Registration Error:', error);
+      console.error('   Received ownerAddress:', ownerAddress, 'Type:', typeof ownerAddress);
+      toast.error('Wallet address is required for SuiNS registration');
+      return {
+        success: false,
+        error,
+      };
     }
+
+    // Additional validation: Check if address looks like a valid Sui address
+    if (!ownerAddress.startsWith('0x') || ownerAddress.length < 10) {
+      const error = `Invalid Sui address format: ${ownerAddress}. Address must start with '0x' and be properly formatted.`;
+      console.error('❌ SuiNS Registration Error:', error);
+      toast.error('Invalid wallet address format');
+      return {
+        success: false,
+        error,
+      };
+    }
+
+    // Validate suinsClient
+    if (!suinsClient) {
+      const error = "SuinsClient is required for SuiNS registration";
+      console.error('❌ SuiNS Registration Error:', error);
+      toast.error('SuiNS client not initialized');
+      return {
+        success: false,
+        error,
+      };
+    }
+
+    // Validate signAndExecuteTransaction function
+    if (!signAndExecuteTransaction || typeof signAndExecuteTransaction !== 'function') {
+      const error = "signAndExecuteTransaction function is required for SuiNS registration";
+      console.error('❌ SuiNS Registration Error:', error);
+      toast.error('Transaction signing function not available');
+      return {
+        success: false,
+        error,
+      };
+    }
+
+    console.log('✅ All validations passed for SuiNS registration');
+    console.log('   Project Name:', projectName);
+    console.log('   Owner Address:', ownerAddress);
+    console.log('   SuinsClient:', suinsClient ? 'Initialized' : 'Missing');
 
     // Sanitize project name for SuiNS (lowercase, no spaces)
     const sanitizedName = projectName.toLowerCase().replace(/\s+/g, '-');
@@ -75,8 +139,17 @@ export async function handleSuiNameRegistration(
       priceInfoObjectId,
     });
 
-    // Transfer the NFT to the founder
-    tx.transferObjects([nft], tx.pure.address(founderAddress));
+    // Transfer the NFT to the owner (with explicit validation to prevent TypeError)
+    console.log('Transferring SuiNS NFT to owner address:', ownerAddress);
+    console.log('Owner address type check before transfer:', typeof ownerAddress);
+    console.log('Owner address value check:', ownerAddress);
+    
+    // Final safety check before calling tx.pure.address()
+    if (!ownerAddress || typeof ownerAddress !== 'string') {
+      throw new Error(`CRITICAL: ownerAddress is invalid at transfer point. Value: ${ownerAddress}, Type: ${typeof ownerAddress}`);
+    }
+    
+    tx.transferObjects([nft], tx.pure.address(ownerAddress));
 
     // Execute the transaction
     const result = await signAndExecuteTransaction({

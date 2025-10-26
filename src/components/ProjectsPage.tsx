@@ -14,7 +14,7 @@ import { walrus } from "@mysten/walrus";
 const mockProjects = [
   {
     id: "1",
-    name: "DeFi Analytics Platform",
+    name: "defi-analytics.sui",
     description: "Real-time analytics and insights for decentralized finance protocols. Track your portfolio across multiple chains with AI-powered predictions.",
     category: "DeFi",
     image: "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxibG9ja2NoYWluJTIwbmV0d29ya3xlbnwxfHx8fDE3NjEzMjE5ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
@@ -26,7 +26,7 @@ const mockProjects = [
   },
   {
     id: "2",
-    name: "AI Code Assistant",
+    name: "ai-code-assistant.sui",
     description: "Next-generation AI pair programmer that understands your codebase. Built on open-source LLMs with privacy-first architecture.",
     category: "AI/ML",
     image: "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhaSUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzYxMjg2NDc4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
@@ -38,7 +38,7 @@ const mockProjects = [
   },
   {
     id: "3",
-    name: "Creator Economy DAO",
+    name: "creator-economy.sui",
     description: "Decentralized platform empowering creators with fair monetization, NFT integration, and community governance tools.",
     category: "DAO",
     image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0ZWNoJTIwc3RhcnR1cHxlbnwxfHx8fDE3NjEyODE2ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
@@ -50,7 +50,7 @@ const mockProjects = [
   },
   {
     id: "4",
-    name: "ZK Privacy Protocol",
+    name: "zk-privacy.sui",
     description: "Zero-knowledge proof infrastructure for privacy-preserving applications. Enterprise-ready with easy integration SDKs.",
     category: "Infrastructure",
     image: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjB3b3Jrc3BhY2V8ZW58MXx8fHwxNzYxMzA1NjI4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
@@ -62,7 +62,7 @@ const mockProjects = [
   },
   {
     id: "5",
-    name: "Cross-Chain DEX",
+    name: "crosschain-dex.sui",
     description: "Seamless token swaps across 15+ blockchains with the lowest fees. Powered by advanced AMM algorithms.",
     category: "DeFi",
     image: "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxibG9ja2NoYWluJTIwbmV0d29ya3xlbnwxfHx8fDE3NjEzMjE5ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
@@ -74,7 +74,7 @@ const mockProjects = [
   },
   {
     id: "6",
-    name: "NFT Gaming Marketplace",
+    name: "nft-gaming.sui",
     description: "Trade, rent, and lease gaming NFTs with built-in escrow and reputation system. Supporting 100+ games.",
     category: "Gaming",
     image: "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhaSUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzYxMjg2NDc4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
@@ -149,9 +149,28 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
 
   const categories = ["All", "DeFi", "AI/ML", "DAO", "Infrastructure", "Gaming"];
 
-  const filteredProjects = mockProjects.filter((project) => {
+  // Helper function to ensure project name is in SuiNS format
+  const ensureSuiNSFormat = (name: string): string => {
+    if (!name) return '';
+    // If already ends with .sui, return as is
+    if (name.toLowerCase().endsWith('.sui')) {
+      return name;
+    }
+    // Otherwise, sanitize and add .sui extension
+    return `${name.toLowerCase().replace(/\s+/g, '-')}.sui`;
+  };
+
+  // Use real blockchain projects if available, otherwise fall back to mock projects
+  // Transform all project names to SuiNS format for consistent display
+  const allProjects = (projects.length > 0 ? projects : mockProjects).map(project => ({
+    ...project,
+    name: ensureSuiNSFormat(project.name),
+    originalName: project.name // Keep original for reference
+  }));
+
+  const filteredProjects = allProjects.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.description.toLowerCase().includes(searchQuery.toLowerCase());
+                         project.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "all" || project.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });

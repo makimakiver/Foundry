@@ -8,7 +8,7 @@
 import { SuinsClient } from '@mysten/suins';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { getFullnodeUrl } from "@mysten/sui/client";
-import { handleSuiNameRegistration, createSuiSubname, formatSui } from './suins-utils';
+import { handleSuiNameRegistration, createSuiSubname, formatSui, registerTeamSubnames } from './suins-utils';
 
 // Example 1: Basic SuiNS Name Registration
 async function exampleBasicRegistration(
@@ -256,6 +256,157 @@ async function exampleBatchRegistration(
   return results;
 }
 
+// Example 9: Register Team Member Subnames (NEW!)
+async function exampleRegisterTeamSubnames(
+  projectName: string,
+  parentNftObjectId: string,
+  suinsClient: SuinsClient,
+  signAndExecuteTransaction: any
+) {
+  // Define team members with their roles and Sui addresses
+  const teamMembers = [
+    { role: "co-founder", address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" },
+    { role: "developer", address: "0x8f3e2b1c4a5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f" },
+    { role: "designer", address: "0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b" },
+  ];
+
+  console.log(`🚀 Registering subnames for ${teamMembers.length} team members...`);
+
+  const result = await registerTeamSubnames(
+    projectName,
+    teamMembers,
+    parentNftObjectId,
+    suinsClient,
+    signAndExecuteTransaction
+  );
+
+  console.log(`\n📊 Registration Results:`);
+  console.log(`✅ Successful: ${result.successCount}`);
+  console.log(`❌ Failed: ${result.failureCount}`);
+  
+  console.log(`\n📋 Detailed Results:`);
+  result.results.forEach((r, i) => {
+    if (r.success) {
+      console.log(`${i + 1}. ✅ ${r.subname} → ${r.address}`);
+      console.log(`   Digest: ${r.digest}`);
+    } else {
+      console.log(`${i + 1}. ❌ ${r.subname} → ${r.address}`);
+      console.log(`   Error: ${r.error}`);
+    }
+  });
+
+  return result;
+}
+
+// Example 10: Complete Flow with Team Subnames
+async function exampleCompleteFlowWithTeam(
+  projectData: {
+    name: string;
+    description: string;
+    fundingGoal: string;
+    teamMembers: Array<{ role: string; address: string }>;
+  },
+  founderAddress: string,
+  suinsClient: SuinsClient,
+  signAndExecuteTransaction: any,
+  client: any
+) {
+  console.log("🚀 Starting complete project launch with team subnames...");
+
+  // Step 1: Register primary project name
+  console.log("\n📝 Step 1: Registering project name...");
+  const registrationResult = await handleSuiNameRegistration(
+    projectData.name,
+    founderAddress,
+    suinsClient,
+    signAndExecuteTransaction,
+    client
+  );
+
+  if (!registrationResult.success) {
+    console.error("❌ Project name registration failed:", registrationResult.error);
+    return { success: false, error: registrationResult.error };
+  }
+
+  console.log("✅ Project name registered:", registrationResult.digest);
+
+  // Step 2: Register team member subnames
+  if (registrationResult.nftObjectId && projectData.teamMembers.length > 0) {
+    console.log("\n👥 Step 2: Registering team member subnames...");
+    
+    const teamResult = await registerTeamSubnames(
+      projectData.name,
+      projectData.teamMembers,
+      registrationResult.nftObjectId,
+      suinsClient,
+      signAndExecuteTransaction
+    );
+
+    console.log(`✅ Team registration complete: ${teamResult.successCount}/${projectData.teamMembers.length} successful`);
+    
+    return {
+      success: true,
+      projectRegistration: registrationResult,
+      teamRegistration: teamResult,
+    };
+  } else {
+    console.log("⚠️ Skipping team subnames (no NFT ID or no team members)");
+    return {
+      success: true,
+      projectRegistration: registrationResult,
+    };
+  }
+}
+
+// Example 11: Team Subnames with Error Handling
+async function exampleTeamSubnamesWithErrorHandling(
+  projectName: string,
+  teamMembers: Array<{ role: string; address: string }>,
+  parentNftObjectId: string,
+  suinsClient: SuinsClient,
+  signAndExecuteTransaction: any
+) {
+  try {
+    console.log(`Attempting to register ${teamMembers.length} team member subnames...`);
+    
+    const result = await registerTeamSubnames(
+      projectName,
+      teamMembers,
+      parentNftObjectId,
+      suinsClient,
+      signAndExecuteTransaction
+    );
+
+    // Check if all succeeded
+    if (result.successCount === teamMembers.length) {
+      console.log("✅ All team members registered successfully!");
+      return { allSucceeded: true, result };
+    }
+    
+    // Partial success
+    if (result.successCount > 0) {
+      console.warn(`⚠️ Partial success: ${result.successCount}/${teamMembers.length}`);
+      
+      // Log failed registrations
+      const failures = result.results.filter(r => !r.success);
+      console.log("Failed registrations:");
+      failures.forEach(f => {
+        console.log(`  - ${f.role} (${f.address}): ${f.error}`);
+      });
+      
+      return { allSucceeded: false, partialSuccess: true, result };
+    }
+    
+    // All failed
+    console.error("❌ All team member registrations failed");
+    return { allSucceeded: false, partialSuccess: false, result };
+    
+  } catch (error) {
+    console.error("Unexpected error during team registration:", error);
+    return { allSucceeded: false, error };
+  }
+}
+
 // Export examples for reference
 export {
   exampleBasicRegistration,
@@ -266,5 +417,8 @@ export {
   exampleNameSanitization,
   exampleCheckAvailability,
   exampleBatchRegistration,
+  exampleRegisterTeamSubnames,
+  exampleCompleteFlowWithTeam,
+  exampleTeamSubnamesWithErrorHandling,
 };
 

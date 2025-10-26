@@ -18,7 +18,8 @@ export async function handleSuiNameRegistration(
   signAndExecuteTransaction: (params: {
     transaction: Transaction;
     chain?: string;
-  }) => Promise<{ digest: string }>
+  }) => Promise<{ digest: string }>,
+  client?: any // Optional Sui client for querying transaction results
 ): Promise<{ success: boolean; nftObjectId?: string; digest?: string; error?: string }> {
   try {
     // Validate inputs
@@ -83,13 +84,38 @@ export async function handleSuiNameRegistration(
       chain: 'sui:testnet',
     });
 
+    // Try to extract NFT object ID from transaction result if client is provided
+    let nftObjectId: string | undefined;
+    if (client && result.digest) {
+      try {
+        const txInfo = await client.getTransactionBlock({
+          digest: result.digest,
+          options: { showObjectChanges: true }
+        });
+        
+        // Find the created SuiNS NFT object
+        const nftChange = txInfo?.objectChanges?.find(
+          (o: any) =>
+            o.type === 'created' &&
+            ((o.objectType ?? o.object_type) || '').toLowerCase().includes('::suins::')
+        );
+        
+        if (nftChange) {
+          nftObjectId = nftChange.objectId;
+          console.log(`✅ SuiNS NFT Object ID: ${nftObjectId}`);
+        }
+      } catch (error) {
+        console.warn('Could not extract NFT object ID from transaction:', error);
+      }
+    }
+
     toast.dismiss();
     toast.success(`Successfully registered ${sanitizedName}.sui!`);
 
     return {
       success: true,
       digest: result.digest,
-      nftObjectId: undefined, // Will be extracted from transaction result if needed
+      nftObjectId,
     };
   } catch (error) {
     toast.dismiss();
@@ -168,6 +194,192 @@ export async function createSuiSubname(
       error: errorMessage,
     };
   }
+}
+
+/**
+ * Registers SuiNS subnames for all team members
+ * 
+ * This function iterates through team members and creates subnames in the format:
+ * {projectName}.{memberRole} (e.g., "foundry.cofounder")
+ * 
+ * Each subname is linked to the respective team member's Sui wallet address.
+ * 
+ * @param projectName - The sanitized project name (base domain)
+ * @param teamMembers - Array of team members with role and address
+ * @param parentNftObjectId - The object ID of the parent project SuiNS NFT
+ * @param suinsClient - The initialized SuinsClient instance
+ * @param signAndExecuteTransaction - Function to sign and execute transactions
+ * @returns Promise with results for each team member registration
+ */
+export async function registerTeamSubnames(
+  projectName: string,
+  teamMembers: Array<{ role: string; address: string }>,
+  parentNftObjectId: string,
+  suinsClient: SuinsClient,
+  signAndExecuteTransaction: (params: {
+    transaction: Transaction;
+    chain?: string;
+  }) => Promise<{ digest: string }>
+): Promise<{
+  success: boolean;
+  results: Array<{
+    role: string;
+    address: string;
+    success: boolean;
+    subname?: string;
+    digest?: string;
+    error?: string;
+  }>;
+  successCount: number;
+  failureCount: number;
+}> {
+  const results: Array<{
+    role: string;
+    address: string;
+    success: boolean;
+    subname?: string;
+    digest?: string;
+    error?: string;
+  }> = [];
+
+  // Validate inputs
+  if (!projectName || projectName.trim().length === 0) {
+    toast.error("Project name is required for team subname registration");
+    return {
+      success: false,
+      results: [],
+      successCount: 0,
+      failureCount: 0,
+    };
+  }
+
+  if (!parentNftObjectId) {
+    toast.error("Parent NFT object ID is required for team subname registration");
+    return {
+      success: false,
+      results: [],
+      successCount: 0,
+      failureCount: 0,
+    };
+  }
+
+  if (!teamMembers || teamMembers.length === 0) {
+    console.log("No team members to register subnames for");
+    return {
+      success: true,
+      results: [],
+      successCount: 0,
+      failureCount: 0,
+    };
+  }
+
+  // Sanitize project name
+  const sanitizedProjectName = projectName.toLowerCase().replace(/\s+/g, '-');
+
+  // Filter out team members with missing data
+  const validMembers = teamMembers.filter(member => 
+    member.address && 
+    member.address.trim().length > 0 && 
+    member.role && 
+    member.role.trim().length > 0
+  );
+
+  if (validMembers.length === 0) {
+    console.log("No valid team members with both role and address");
+    return {
+      success: true,
+      results: [],
+      successCount: 0,
+      failureCount: 0,
+    };
+  }
+
+  toast.loading(`Registering subnames for ${validMembers.length} team member(s)...`);
+
+  let successCount = 0;
+  let failureCount = 0;
+
+  // Process each team member
+  for (let i = 0; i < validMembers.length; i++) {
+    const member = validMembers[i];
+    
+    // Sanitize role for subname (lowercase, no spaces, no special chars)
+    const sanitizedRole = member.role
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+    
+    // Create subname in format: projectname.role (e.g., "foundry.cofounder")
+    const fullSubname = `${sanitizedProjectName}.${sanitizedRole}`;
+
+    try {
+      console.log(`Registering subname ${i + 1}/${validMembers.length}: ${fullSubname} → ${member.address}`);
+
+      const tx = new Transaction();
+      const suinsTx = new SuinsTransaction(suinsClient, tx);
+
+      // Create a leaf subname that points to the team member's address
+      suinsTx.createLeafSubName({
+        parentNft: tx.object(parentNftObjectId),
+        name: sanitizedRole, // Just the role part (e.g., "cofounder")
+        targetAddress: member.address,
+      });
+
+      // Execute the transaction
+      const result = await signAndExecuteTransaction({
+        transaction: tx,
+        chain: 'sui:testnet',
+      });
+
+      successCount++;
+      results.push({
+        role: member.role,
+        address: member.address,
+        success: true,
+        subname: fullSubname,
+        digest: result.digest,
+      });
+
+      console.log(`✅ Successfully registered: ${fullSubname}`);
+
+    } catch (error) {
+      failureCount++;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      results.push({
+        role: member.role,
+        address: member.address,
+        success: false,
+        subname: fullSubname,
+        error: errorMessage,
+      });
+
+      console.error(`❌ Failed to register ${fullSubname}:`, errorMessage);
+    }
+
+    // Add a small delay between transactions to avoid rate limiting
+    if (i < validMembers.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  toast.dismiss();
+
+  // Provide user feedback
+  if (successCount === validMembers.length) {
+    toast.success(`Successfully registered ${successCount} team member subname(s)!`);
+  } else if (successCount > 0) {
+    toast.warning(`Registered ${successCount}/${validMembers.length} team member subname(s)`);
+  } else {
+    toast.error(`Failed to register team member subnames`);
+  }
+
+  return {
+    success: successCount > 0,
+    results,
+    successCount,
+    failureCount,
+  };
 }
 
 /**

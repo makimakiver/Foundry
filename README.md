@@ -63,16 +63,26 @@ npm run build
 
 ## SuiNS Integration
 
-This project includes automatic SuiNS (Sui Name Service) registration for launched projects. When a project is submitted, a `.sui` domain is automatically registered and transferred to the founder.
+This project includes automatic SuiNS (Sui Name Service) registration for launched projects. When a project is submitted, a `.sui` domain is automatically registered and transferred to the founder, along with subnames for all team members.
 
 For detailed documentation on the SuiNS integration, see [SUINS_INTEGRATION.md](./SUINS_INTEGRATION.md).
 
 ### Key Features:
-- Automatic name sanitization (lowercase, hyphenated)
-- Price calculation based on name length
-- NFT transfer to project founder
-- Optional subname creation for team members
-- Comprehensive error handling
+- **Primary Domain**: Automatic `.sui` domain registration for projects
+- **Team Subnames**: Automatic subname registration for team members (e.g., `foundry.co-founder`)
+- **Name Sanitization**: Automatic lowercase and hyphenation
+- **Price Calculation**: Dynamic pricing based on name length
+- **NFT Transfer**: Automatic transfer to project founder
+- **Error Handling**: Comprehensive non-blocking error handling
+- **Batch Processing**: Efficient team member registration with rate limiting
+
+### Team Subnames
+Each team member automatically gets a subname in the format `{projectName}.{memberRole}`:
+- Co-founder → `foundry.co-founder`
+- Developer → `foundry.developer`
+- Designer → `foundry.designer`
+
+See [TEAM_SUBNAMES_DOCUMENTATION.md](./TEAM_SUBNAMES_DOCUMENTATION.md) for details.
 
 ## Project Structure
 

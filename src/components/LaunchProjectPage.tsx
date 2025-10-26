@@ -38,7 +38,7 @@ import { toast } from "sonner@2.0.3";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { handleSuiNameRegistration } from "../lib/suins-utils";
+import { handleSuiNameRegistration, registerTeamSubnames } from "../lib/suins-utils";
 
 interface ProjectFormData {
   name: string;
@@ -176,12 +176,44 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
         data.name,
         currentAccount.address,
         suinsClient,
-        signAndExecuteTransaction
+        signAndExecuteTransaction,
+        client // Pass client to extract NFT object ID
       );
       
       if (!suinsResult.success) {
         console.warn('SuiNS registration failed, but continuing with project creation:', suinsResult.error);
         toast.warning('Project created but SuiNS registration failed. You can register the name later.');
+      }
+      
+      // Step 3.5: Register team member subnames (if primary registration succeeded)
+      if (suinsResult.success && suinsResult.nftObjectId && data.teamMembers && data.teamMembers.length > 0) {
+        console.log('Registering team member subnames...');
+        
+        // Map team members from form data to the format expected by registerTeamSubnames
+        const teamMembersForSubnames = data.teamMembers
+          .filter(member => member.name && member.role)
+          .map(member => ({
+            role: member.role,
+            address: member.name, // In the form, 'name' field contains the address
+          }));
+        
+        if (teamMembersForSubnames.length > 0) {
+          const teamSubnamesResult = await registerTeamSubnames(
+            data.name,
+            teamMembersForSubnames,
+            suinsResult.nftObjectId,
+            suinsClient,
+            signAndExecuteTransaction
+          );
+          
+          if (teamSubnamesResult.success) {
+            console.log(`✅ Registered ${teamSubnamesResult.successCount} team member subname(s)`);
+          } else {
+            console.warn('Team subname registration had issues:', teamSubnamesResult);
+          }
+        }
+      } else if (suinsResult.success && !suinsResult.nftObjectId) {
+        console.warn('Could not register team subnames: NFT object ID not available');
       }
       
       // Step 4: Create subname for founder (optional, under foundry parent if available)

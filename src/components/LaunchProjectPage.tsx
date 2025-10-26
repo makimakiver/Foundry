@@ -258,16 +258,20 @@ export function LaunchProjectPage({ onProjectSubmitted, onProjectCreated }: Laun
       // Split coins for funding goal
       const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
       
-      // Generate SuiNS name from project name (sanitized)
+      // Generate SuiNS name for display (not sent to old contract version)
+      // TODO: When contract is upgraded, add suins_name parameter back
       const suinsName = `${data.name.toLowerCase().replace(/\s+/g, '-')}.sui`;
+      console.log('Project will use SuiNS name:', suinsName);
       
       // Call the smart contract to register the project
+      // NOTE: Using old contract signature without suins_name parameter
+      // The deployed contract doesn't have the suins_name param yet
       tx.moveCall({
         target: `${vendor}::ideation::suggest_idea`,
         arguments: [
           tx.object(registry),
           tx.pure.string(data.name),
-          tx.pure.string(suinsName), // Add SuiNS name parameter
+          // tx.pure.string(suinsName), // Commented out - contract doesn't support this yet
           tx.object(blob_objectId),
           tx.pure.string(data.image),
           coin

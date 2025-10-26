@@ -157,10 +157,15 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
             console.warn(`Could not fetch metadata for project ${index}:`, err);
           }
 
+          // Generate SuiNS name from project name if not available in contract
+          // (Old contract version doesn't store suins_name)
+          const projectName = idea.name || `Project ${index + 1}`;
+          const generatedSuinsName = `${projectName.toLowerCase().replace(/\s+/g, '-')}.sui`;
+          
           return {
             id: idea.id?.id || `project-${index}`,
-            name: idea.name || `Project ${index + 1}`,
-            suinsName: idea.suins_name || `project-${index}.sui`,
+            name: projectName,
+            suinsName: idea.suins_name || generatedSuinsName, // Fallback to generated name
             description: metadata.description,
             category: metadata.category,
             image: idea.image || "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?w=1080",

@@ -122,6 +122,13 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       return;
     }
     
+    // Validate environment variables
+    if (!vendor || !registry) {
+      toast.error('Environment variables not configured. Please set VITE_PACKAGE_ID and VITE_REGISTRY_ID in your .env file');
+      console.error('Missing environment variables:', { vendor, registry, foundry });
+      return;
+    }
+    
     try {
       console.log('Starting project submission...');
       
@@ -166,6 +173,11 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
             ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
         ) ?? null;
       const blob_objectId = blobChange?.objectId;
+      
+      // Validate blob creation
+      if (!blob_objectId) {
+        throw new Error('Failed to create blob object. Please try again.');
+      }
       
       toast.dismiss();
       toast.success('Metadata uploaded successfully!');
@@ -252,6 +264,12 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       
       // Step 5: Submit project to the Foundry smart contract
       toast.loading('Submitting project to Foundry...');
+      
+      // Final validation before smart contract call
+      if (!blob_objectId) {
+        throw new Error('Blob object ID is missing. Cannot submit project.');
+      }
+      
       const tx = new Transaction();
       
       // Split coins for funding goal
@@ -264,7 +282,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           tx.object(registry),
           tx.pure.string(data.name),
           tx.object(blob_objectId),
-          tx.pure.string(data.image),
+          tx.pure.string(data.image || ''), // Provide empty string as fallback
           coin
         ]
       });

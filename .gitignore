@@ -3,6 +3,13 @@ node_modules/
 /.pnp
 .pnp.js
 
+# Vite build artifacts and cache
+.vite/
+node_modules/.vite/
+dist/
+dist-ssr/
+*.local
+
 # Testing
 /coverage
 

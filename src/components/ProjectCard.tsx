@@ -8,6 +8,7 @@ import { Users, Clock, TrendingUp, ExternalLink } from "lucide-react";
 interface ProjectCardProps {
   id: string;
   name: string;
+  suinsName?: string;
   description: string;
   category: string;
   image: string;
@@ -21,6 +22,7 @@ interface ProjectCardProps {
 
 export function ProjectCard({
   name,
+  suinsName,
   description,
   category,
   image,
@@ -78,7 +80,14 @@ export function ProjectCard({
       {/* Content */}
       <div className="p-6 space-y-4">
         <div>
-          <h3 className="text-foreground mb-2">{name}</h3>
+          <h3 className="text-foreground mb-1">{name}</h3>
+          {suinsName && (
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-mono text-[#00E0FF] bg-[#00E0FF]/10 px-2 py-1 rounded">
+                {suinsName}
+              </span>
+            </div>
+          )}
           <p className="text-muted-foreground line-clamp-2">
             {description}
           </p>

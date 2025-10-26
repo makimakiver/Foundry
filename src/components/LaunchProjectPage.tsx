@@ -38,6 +38,7 @@ import { toast } from "sonner@2.0.3";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
+import { handleSuiNameRegistration } from "../lib/suins-utils";
 
 interface ProjectFormData {
   name: string;
@@ -117,110 +118,154 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
   const onSubmit = async(data: ProjectFormData) => {
     if(!currentAccount) {
       console.log('Did not connect!!');
+      toast.error('Please connect your wallet to launch a project');
       return;
     }
-    console.log('pressed')
-    const json = JSON.stringify(data);
-    const fileData = new TextEncoder().encode(json)
-    const flow = client.walrus.writeFilesFlow({
-      files: [
-        WalrusFile.from({
-          contents: new Uint8Array(fileData),
-          identifier: 'my-file.txt',
-        }),
-      ],
-    });
-    await flow.encode();
-    const registerTx = flow.register({
-      epochs: 3,
-      owner: currentAccount.address,
-      deletable: true,
-    });
-    const { digest } = await signAndExecuteTransaction({ transaction: registerTx });
-    // Step 3: Upload the data to storage nodes
-    // This can be done immediately after the register step, or as a separate step the user initiates
-    await flow.upload({ digest });
-    const info = await client.getTransactionBlock({
-      digest, 
-      options: { showObjectChanges: true }
-    });
-    const blobChange =
-      info?.objectChanges?.find(
-        (o: any) =>
-          o.type === 'created' &&
-          ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
-      ) ?? null;
-    const blob_objectId = blobChange?.objectId;
-    const tx = new Transaction();
-    // Pass in the transaction block & the app's global SuinsClient.
-    const suinsTx = new SuinsTransaction(suinsClient, tx);
-    // Specify the coin type used for the transaction, can be SUI/NS/USDC
-    const coinConfig = suinsClient.config.coins.SUI;
-  
-    // priceInfoObjectId is required for SUI/NS
-    const priceInfoObjectId = (await suinsClient.getPriceInfoObject(tx, coinConfig.feed))[0];
-    const priceList = await suinsClient.getPriceList();
-    console.log(priceList);
-    const sui_name = data.name;
-    let price_mist = '';
-    for (const [range, price] of priceList) {
-      const [min, max] = range;
-      if (sui_name.length >= min && sui_name.length <= max) {
-        price_mist = price.toString();
-        break;
+    
+    try {
+      console.log('Starting project submission...');
+      
+      // Step 1: Prepare and upload project metadata to Walrus
+      toast.loading('Preparing project metadata...');
+      const json = JSON.stringify(data);
+      const fileData = new TextEncoder().encode(json);
+      
+      const flow = client.walrus.writeFilesFlow({
+        files: [
+          WalrusFile.from({
+            contents: new Uint8Array(fileData),
+            identifier: `${data.name}-metadata.json`,
+          }),
+        ],
+      });
+      
+      await flow.encode();
+      
+      const registerTx = flow.register({
+        epochs: 3,
+        owner: currentAccount.address,
+        deletable: true,
+      });
+      
+      const { digest } = await signAndExecuteTransaction({ transaction: registerTx });
+      
+      // Step 2: Upload the data to storage nodes
+      toast.dismiss();
+      toast.loading('Uploading metadata to Walrus...');
+      await flow.upload({ digest });
+      
+      const info = await client.getTransactionBlock({
+        digest, 
+        options: { showObjectChanges: true }
+      });
+      
+      const blobChange =
+        info?.objectChanges?.find(
+          (o: any) =>
+            o.type === 'created' &&
+            ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
+        ) ?? null;
+      const blob_objectId = blobChange?.objectId;
+      
+      toast.dismiss();
+      toast.success('Metadata uploaded successfully!');
+      
+      // Step 3: Register primary SuiNS name for the project
+      console.log('Registering SuiNS name for project:', data.name);
+      const suinsResult = await handleSuiNameRegistration(
+        data.name,
+        currentAccount.address,
+        suinsClient,
+        signAndExecuteTransaction
+      );
+      
+      if (!suinsResult.success) {
+        console.warn('SuiNS registration failed, but continuing with project creation:', suinsResult.error);
+        toast.warning('Project created but SuiNS registration failed. You can register the name later.');
       }
-    }
-    let [coin] = tx.splitCoins(tx.gas, [price_mist]);
-    const subNameNft = suinsTx.createSubName({
-        // The NFT of the parent
-        parentNft: tx.object(foundry),
-        // The subname to be created.
-        name: data.name,
-        // The expiration timestamp needs to be less than or equal to the parent's expiration.
-        expirationTimestampMs: 1735132800000,
-        // Whether the subname can create more nested subnames.
-        // E.g. more.inner.sui could create even.more.inner.sui
-        allowChildCreation: true,
-        // Whether the subname can manually extend the expiration time to
-        // the expiration time of the parent name. Can be tweaked after creation too.
-        allowTimeExtension: true,
-    });
-    suinsTx.createLeafSubName({
-        // The NFT of the parent
-        parentNft: subNameNft,
-        // The leaf subname to be created.
-        name: "founder",
-        // the target address of the leaf subname (any valid Sui address)
-        targetAddress: currentAccount.address,
-    });
-    // tx.transferObjects([nft], tx.pure.address(currentAccount.address));
-    [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
-    tx.moveCall({
-        target: `${vendor}::ideation::suggest_idea`,
-        arguments: [tx.object(registry), tx.pure.string(data.name), tx.object(blob_objectId), tx.pure.string(data.image), coin]
-    })
-    signAndExecuteTransaction(
-      {
-        transaction: tx,
-        chain: 'sui:testnet',
-      },
-      {
-        onSuccess: (result) => {
-          console.log('executed transaction', result);
+      
+      // Step 4: Create subname for founder (optional, under foundry parent if available)
+      if (foundry) {
+        try {
+          toast.loading('Creating founder subname...');
+          const tx = new Transaction();
+          const suinsTx = new SuinsTransaction(suinsClient, tx);
           
-          console.log("Investment history visibility:", historyVisibility);
-          toast.success(
-            `Project submitted for review! (${historyVisibility === "public" ? "Public" : "Private"} history)`
-          );
-          // Here you would submit to your backend/smart contract
-          // Redirect to landing (projects) page after successful submit
-          onProjectSubmitted();
-        },
-        onError: (err) => {
-          console.log(err)
+          const subNameNft = suinsTx.createSubName({
+            parentNft: tx.object(foundry),
+            name: data.name,
+            expirationTimestampMs: 1735132800000,
+            allowChildCreation: true,
+            allowTimeExtension: true,
+          });
+          
+          suinsTx.createLeafSubName({
+            parentNft: subNameNft,
+            name: "founder",
+            targetAddress: currentAccount.address,
+          });
+          
+          await signAndExecuteTransaction({
+            transaction: tx,
+            chain: 'sui:testnet',
+          });
+          
+          toast.dismiss();
+          toast.success('Founder subname created!');
+        } catch (error) {
+          console.warn('Subname creation failed:', error);
+          toast.dismiss();
         }
-      },
-    );
+      }
+      
+      // Step 5: Submit project to the Foundry smart contract
+      toast.loading('Submitting project to Foundry...');
+      const tx = new Transaction();
+      
+      // Split coins for funding goal
+      const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
+      
+      // Call the smart contract to register the project
+      tx.moveCall({
+        target: `${vendor}::ideation::suggest_idea`,
+        arguments: [
+          tx.object(registry),
+          tx.pure.string(data.name),
+          tx.object(blob_objectId),
+          tx.pure.string(data.image),
+          coin
+        ]
+      });
+      
+      signAndExecuteTransaction(
+        {
+          transaction: tx,
+          chain: 'sui:testnet',
+        },
+        {
+          onSuccess: (result) => {
+            console.log('Project submitted successfully:', result);
+            toast.dismiss();
+            toast.success(
+              `Project submitted for review! (${historyVisibility === "public" ? "Public" : "Private"} history)`
+            );
+            console.log("Investment history visibility:", historyVisibility);
+            
+            // Redirect to projects page
+            onProjectSubmitted();
+          },
+          onError: (err) => {
+            console.error('Project submission error:', err);
+            toast.dismiss();
+            toast.error('Failed to submit project. Please try again.');
+          }
+        },
+      );
+    } catch (error) {
+      console.error('Error during project submission:', error);
+      toast.dismiss();
+      toast.error(error instanceof Error ? error.message : 'An unexpected error occurred');
+    }
   };
 
   const nextStep = () => {

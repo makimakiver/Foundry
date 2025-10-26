@@ -1,4 +1,6 @@
 import { Rocket, Moon, Sun } from "lucide-react";
+import buidIcon from "../assets/buid_icon.png";
+import foundryLogo from "../assets/foundry3.png";
 import { WalletButton } from "./WalletButton";
 import { useTheme } from "../contexts/ThemeContext";
 import { Button } from "./ui/button";
@@ -15,6 +17,7 @@ interface NavigationProps {
 
 export function Navigation({ isConnected, walletAddress, onConnect, onDisconnect, onNavigate }: NavigationProps) {
   const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
   
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border transition-colors duration-300">
@@ -25,35 +28,43 @@ export function Navigation({ isConnected, walletAddress, onConnect, onDisconnect
             onClick={() => onNavigate("projects")}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
           >
-            <div className="bg-gradient-to-br from-[#00E0FF] via-[#C04BFF] to-[#FF6B00] p-2 rounded-lg">
-              <Rocket className="w-5 h-5 text-white dark:text-[#0D0E10]" />
-            </div>
-            <span className="text-xl text-foreground">Foundry³</span>
+            <img
+              src={buidIcon}
+              alt="BUID logo"
+              className="w-10 h-10 md:w-15 md:h-15 lg:w-15 lg:h-15 rounded-md object-contain"
+              style={{ filter: isDark ? 'invert(1)' : 'none' }}
+            />
+            <img
+              src={foundryLogo}
+              alt="Foundry³ logo"
+              className="h-7 md:h-7 lg:h-8 w-auto object-contain"
+              style={{ filter: isDark ? 'invert(1)' : 'none' }}
+            />
           </button>
           
           {/* Navigation Links */}
           <div className="hidden md:flex items-center gap-8">
             <button 
               onClick={() => onNavigate("projects")}
-              className="text-[16px] text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
+              className="text-[16px] font-semibold text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
             >
               Projects
             </button>
             <button 
               onClick={() => onNavigate("stats")}
-              className="text-[16px] text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
+              className="text-[16px] font-semibold text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
             >
               My Projects
             </button>
             <button 
               onClick={() => onNavigate("launch")}
-              className="text-[16px] text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
+              className="text-[16px] font-semibold text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
             >
               Launch Project
             </button>
             <a 
               href="#about" 
-              className="text-[16px] text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
+              className="text-[16px] font-semibold text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
             >
               About
             </a>

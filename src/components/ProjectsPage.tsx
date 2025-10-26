@@ -7,6 +7,7 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Search, SlidersHorizontal, Rocket, TrendingUp, Users, Target } from "lucide-react";
 import { motion } from "motion/react";
+import bgImage from "../assets/background_2.jpeg";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { walrus } from "@mysten/walrus";
@@ -179,11 +180,13 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
     <div>
       {/* Hero Section */}
       <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        {/* Gradient background effect */}
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#00E0FF] rounded-full blur-[120px]"></div>
-          <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-[#C04BFF] rounded-full blur-[120px]"></div>
-        </div>
+        {/* Banner background image */}
+        <img
+          src={bgImage}
+          alt="Banner background"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-black/40" />
 
         <div className="max-w-7xl mx-auto relative z-10">
           <motion.div
@@ -192,7 +195,7 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
             transition={{ duration: 0.6 }}
             className="text-center mb-12"
           >
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl text-foreground mb-6 leading-tight">
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl text-foreground mb-6 leading-tight font-alliance-no2-bold">
               <span className="bg-gradient-to-r from-[#00E0FF] via-[#C04BFF] to-[#FF6B00] bg-clip-text text-transparent">
                 Discover Projects
               </span>

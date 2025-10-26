@@ -8,7 +8,6 @@ import { Users, Clock, TrendingUp, ExternalLink } from "lucide-react";
 interface ProjectCardProps {
   id: string;
   name: string;
-  description: string;
   category: string;
   image: string;
   fundingGoal: number;
@@ -21,7 +20,6 @@ interface ProjectCardProps {
 
 export function ProjectCard({
   name,
-  description,
   category,
   image,
   fundingGoal,
@@ -79,9 +77,6 @@ export function ProjectCard({
       <div className="p-6 space-y-4">
         <div>
           <h3 className="text-foreground mb-2">{name}</h3>
-          <p className="text-muted-foreground line-clamp-2">
-            {description}
-          </p>
         </div>
 
         {/* Funding Progress */}

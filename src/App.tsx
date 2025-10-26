@@ -10,7 +10,7 @@ import { WalletProvider, useWallet } from "./contexts/WalletContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { toast } from "sonner@2.0.3";
 import { useCurrentAccount } from "@mysten/dapp-kit";
-
+import { alliance } from '../fonts';
 type Page = "projects" | "launch" | "stats" | "project-details";
 
 interface Project {

@@ -71,8 +71,10 @@
 
 @layer theme {
   :root, :host {
-    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    /* Body: Inter / IBM Plex Sans */
+    --font-sans: Inter, "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    /* Mono: IBM Plex Mono */
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --color-gray-100: oklch(.967 .003 264.542);
     --color-black: #000;
     --color-white: #fff;
@@ -130,6 +132,33 @@
 }
 
 @layer base {
+  /* Alliance Regular font for hero heading */
+  @font-face {
+    font-family: 'Alliance';
+    src: url('/src/assets/Alliance Regular.otf') format('opentype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  .font-alliance {
+    font-family: 'Alliance', 'Space Grotesk', 'Inter Tight', Satoshi, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  /* Alliance No.2 Bold specifically for homepage hero */
+  @font-face {
+    font-family: 'Alliance No.2';
+    src: url('/src/assets/fonts/Alliance No.2 Bold.otf') format('opentype');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  .font-alliance-no2-bold {
+    font-family: 'Alliance No.2', 'Space Grotesk', 'Inter Tight', Satoshi, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-weight: 700;
+  }
+  
   *, :after, :before, ::backdrop {
     box-sizing: border-box;
     border: 0 solid;
@@ -399,15 +428,18 @@
   body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+    /* Body: Inter / IBM Plex Sans */
+    font-family: Inter, "IBM Plex Sans", -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: Space Grotesk, Inter Tight, Satoshi, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
+    /* Headings: Space Grotesk / Inter Tight / Satoshi */
+    font-family: "Space Grotesk", "Inter Tight", Satoshi, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   }
 
   code, pre {
-    font-family: IBM Plex Mono, Courier New, monospace;
+    /* Mono: IBM Plex Mono */
+    font-family: "IBM Plex Mono", Courier New, monospace;
   }
 
   :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) h1 {

@@ -1,93 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ProjectCard } from "./ProjectCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
-import { Search, SlidersHorizontal, Rocket, TrendingUp, Users, Target } from "lucide-react";
+import { Search, SlidersHorizontal, Rocket, TrendingUp, Users, Target, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
-
-const mockProjects = [
-  {
-    id: "1",
-    name: "DeFi Analytics Platform",
-    suinsName: "defi-analytics.sui",
-    description: "Real-time analytics and insights for decentralized finance protocols. Track your portfolio across multiple chains with AI-powered predictions.",
-    category: "DeFi",
-    image: "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxibG9ja2NoYWluJTIwbmV0d29ya3xlbnwxfHx8fDE3NjEzMjE5ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 500000,
-    currentFunding: 387500,
-    backers: 234,
-    daysLeft: 12,
-    status: "live" as const,
-  },
-  {
-    id: "2",
-    name: "AI Code Assistant",
-    suinsName: "ai-code-assistant.sui",
-    description: "Next-generation AI pair programmer that understands your codebase. Built on open-source LLMs with privacy-first architecture.",
-    category: "AI/ML",
-    image: "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhaSUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzYxMjg2NDc4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 750000,
-    currentFunding: 625000,
-    backers: 412,
-    daysLeft: 8,
-    status: "live" as const,
-  },
-  {
-    id: "3",
-    name: "Creator Economy DAO",
-    suinsName: "creator-economy.sui",
-    description: "Decentralized platform empowering creators with fair monetization, NFT integration, and community governance tools.",
-    category: "DAO",
-    image: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0ZWNoJTIwc3RhcnR1cHxlbnwxfHx8fDE3NjEyODE2ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 1000000,
-    currentFunding: 1200000,
-    backers: 856,
-    daysLeft: 0,
-    status: "funded" as const,
-  },
-  {
-    id: "4",
-    name: "ZK Privacy Protocol",
-    suinsName: "zk-privacy.sui",
-    description: "Zero-knowledge proof infrastructure for privacy-preserving applications. Enterprise-ready with easy integration SDKs.",
-    category: "Infrastructure",
-    image: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjB3b3Jrc3BhY2V8ZW58MXx8fHwxNzYxMzA1NjI4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 2000000,
-    currentFunding: 450000,
-    backers: 167,
-    daysLeft: 25,
-    status: "live" as const,
-  },
-  {
-    id: "5",
-    name: "Cross-Chain DEX",
-    suinsName: "crosschain-dex.sui",
-    description: "Seamless token swaps across 15+ blockchains with the lowest fees. Powered by advanced AMM algorithms.",
-    category: "DeFi",
-    image: "https://images.unsplash.com/photo-1639322537504-6427a16b0a28?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxibG9ja2NoYWluJTIwbmV0d29ya3xlbnwxfHx8fDE3NjEzMjE5ODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 1500000,
-    currentFunding: 890000,
-    backers: 523,
-    daysLeft: 15,
-    status: "live" as const,
-  },
-  {
-    id: "6",
-    name: "NFT Gaming Marketplace",
-    suinsName: "nft-gaming.sui",
-    description: "Trade, rent, and lease gaming NFTs with built-in escrow and reputation system. Supporting 100+ games.",
-    category: "Gaming",
-    image: "https://images.unsplash.com/photo-1523961131990-5ea7c61b2107?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxhaSUyMHRlY2hub2xvZ3l8ZW58MXx8fHwxNzYxMjg2NDc4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    fundingGoal: 600000,
-    currentFunding: 150000,
-    backers: 89,
-    daysLeft: 45,
-    status: "upcoming" as const,
-  },
-];
+import { useProjects } from "../contexts/ProjectsContext";
 
 interface Project {
   id: string;
@@ -109,14 +29,21 @@ interface ProjectsPageProps {
 }
 
 export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPageProps) {
+  const { projects, isLoading, fetchProjects } = useProjects();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
-  const categories = ["All", "DeFi", "AI/ML", "DAO", "Infrastructure", "Gaming"];
+  // Fetch projects on mount
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
-  const filteredProjects = mockProjects.filter((project) => {
+  const categories = ["All", "DeFi", "AI/ML", "DAO", "Infrastructure", "Gaming", "NFT", "Social", "Developer Tools"];
+
+  const filteredProjects = projects.filter((project) => {
     const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.description.toLowerCase().includes(searchQuery.toLowerCase());
+                         project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         project.suinsName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "all" || project.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -240,57 +167,89 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
 
               {/* All Projects */}
               <TabsContent value="all" className="mt-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProjects.map((project, index) => (
-                    <motion.div
-                      key={project.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.6, delay: index * 0.05 }}
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-[#00E0FF] animate-spin" />
+                    <span className="ml-3 text-muted-foreground">Loading projects from blockchain...</span>
+                  </div>
+                ) : filteredProjects.length === 0 ? (
+                  <div className="text-center py-20">
+                    <p className="text-muted-foreground text-lg">No projects found matching your criteria</p>
+                    <Button 
+                      onClick={onLaunchProject}
+                      className="mt-6 bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
                     >
-                      <ProjectCard {...project} onViewProject={() => onViewProject(project)} />
-                    </motion.div>
-                  ))}
-                </div>
+                      <Rocket className="w-5 h-5 mr-2" />
+                      Launch First Project
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredProjects.map((project, index) => (
+                      <motion.div
+                        key={project.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.6, delay: index * 0.05 }}
+                      >
+                        <ProjectCard {...project} onViewProject={() => onViewProject(project)} />
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
               {/* Live Projects */}
               <TabsContent value="live" className="mt-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProjects
-                    .filter((p) => p.status === "live")
-                    .map((project, index) => (
-                      <motion.div
-                        key={project.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.6, delay: index * 0.05 }}
-                      >
-                        <ProjectCard {...project} onViewProject={() => onViewProject(project)} />
-                      </motion.div>
-                    ))}
-                </div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-[#00E0FF] animate-spin" />
+                    <span className="ml-3 text-muted-foreground">Loading projects...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredProjects
+                      .filter((p) => p.status === "live")
+                      .map((project, index) => (
+                        <motion.div
+                          key={project.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.6, delay: index * 0.05 }}
+                        >
+                          <ProjectCard {...project} onViewProject={() => onViewProject(project)} />
+                        </motion.div>
+                      ))}
+                  </div>
+                )}
               </TabsContent>
 
               {/* Funded Projects */}
               <TabsContent value="funded" className="mt-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProjects
-                    .filter((p) => p.status === "funded")
-                    .map((project, index) => (
-                      <motion.div
-                        key={project.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.6, delay: index * 0.05 }}
-                      >
-                        <ProjectCard {...project} onViewProject={() => onViewProject(project)} />
-                      </motion.div>
-                    ))}
-                </div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-[#00E0FF] animate-spin" />
+                    <span className="ml-3 text-muted-foreground">Loading projects...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredProjects
+                      .filter((p) => p.status === "funded")
+                      .map((project, index) => (
+                        <motion.div
+                          key={project.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.6, delay: index * 0.05 }}
+                        >
+                          <ProjectCard {...project} onViewProject={() => onViewProject(project)} />
+                        </motion.div>
+                      ))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </motion.div>

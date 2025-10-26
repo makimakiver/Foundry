@@ -8,6 +8,7 @@ import { Footer } from "./components/Footer";
 import { Toaster } from "./components/ui/sonner";
 import { WalletProvider, useWallet } from "./contexts/WalletContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { ProjectsProvider, useProjects } from "./contexts/ProjectsContext";
 import { toast } from "sonner@2.0.3";
 
 type Page = "projects" | "launch" | "stats" | "project-details";
@@ -27,6 +28,7 @@ interface Project {
 
 function AppContent() {
   const { isConnected, walletAddress, connect, disconnect } = useWallet();
+  const { refreshProjects } = useProjects();
   const [currentPage, setCurrentPage] = useState<Page>("projects");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
@@ -83,7 +85,8 @@ function AppContent() {
             onProjectSubmitted={() => {
               setCurrentPage("projects");
               window.scrollTo({ top: 0, behavior: "smooth" });
-            }} 
+            }}
+            onProjectCreated={refreshProjects}
           />
         )}
       </main>
@@ -98,7 +101,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <WalletProvider>
-        <AppContent />
+        <ProjectsProvider>
+          <AppContent />
+        </ProjectsProvider>
       </WalletProvider>
     </ThemeProvider>
   );

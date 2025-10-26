@@ -56,9 +56,10 @@ interface ProjectFormData {
 
 interface LaunchProjectPageProps {
   onProjectSubmitted: () => void;
+  onProjectCreated?: () => Promise<void>;
 }
 
-export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps) {
+export function LaunchProjectPage({ onProjectSubmitted, onProjectCreated }: LaunchProjectPageProps) {
   const vendor = import.meta.env.VITE_PACKAGE_ID;
   const registry = import.meta.env.VITE_REGISTRY_ID;
   const foundry = import.meta.env.VITE_FOUNDRY_ID;
@@ -257,12 +258,16 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       // Split coins for funding goal
       const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
       
+      // Generate SuiNS name from project name (sanitized)
+      const suinsName = `${data.name.toLowerCase().replace(/\s+/g, '-')}.sui`;
+      
       // Call the smart contract to register the project
       tx.moveCall({
         target: `${vendor}::ideation::suggest_idea`,
         arguments: [
           tx.object(registry),
           tx.pure.string(data.name),
+          tx.pure.string(suinsName), // Add SuiNS name parameter
           tx.object(blob_objectId),
           tx.pure.string(data.image),
           coin
@@ -275,13 +280,20 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           chain: 'sui:testnet',
         },
         {
-          onSuccess: (result) => {
+          onSuccess: async (result) => {
             console.log('Project submitted successfully:', result);
             toast.dismiss();
             toast.success(
               `Project submitted for review! (${historyVisibility === "public" ? "Public" : "Private"} history)`
             );
             console.log("Investment history visibility:", historyVisibility);
+            
+            // Refresh projects list to show the new project
+            if (onProjectCreated) {
+              toast.loading('Loading your new project...');
+              await onProjectCreated();
+              toast.dismiss();
+            }
             
             // Redirect to projects page
             onProjectSubmitted();

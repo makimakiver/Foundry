@@ -5,7 +5,7 @@ import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
-import { Search, SlidersHorizontal, Rocket, TrendingUp, Users, Target } from "lucide-react";
+import { Search, SlidersHorizontal, Rocket } from "lucide-react";
 import { motion } from "motion/react";
 import bgImage from "../assets/background4.jpeg";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
@@ -108,11 +108,11 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
           });
           const idea_struct_fields: any[] = (idea_struct as any)?.data?.content?.fields ?? idea_struct;
           console.log(idea_struct_fields);
-          const f = idea_struct.data;
+          const f = (idea_struct as any)?.data?.content?.fields;
           // Try to fetch details blob (optional)
           console.log('project_id: ', f?.id);
           const p = new Project({
-            id: String(f?.id?.id ?? f?.uid ?? `${projectId}-${i}`),
+            id: f?.id?.id ?? f?.id ?? idea,
             name: String(f?.title ?? ''),
             description: String(''),
             category: String(f?.category ?? 'DeFi'),

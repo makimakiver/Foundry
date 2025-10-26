@@ -1,153 +1,134 @@
-# Decentralized Venture Ecosystem (Foundry)
+Foundry - Decentralized Crowdfunding Platform on Sui
+Sui TypeScript React Vite
 
-This is a Web3 crowdfunding and project launch platform built on the Sui blockchain. The original design is available at https://www.figma.com/design/1moZXP34xFbTYNMENOD6IZ/Decentralized-Venture-Ecosystem.
+Foundry is a next-generation decentralized crowdfunding platform built on the Sui blockchain, enabling creators to launch innovative projects and backers to support them with transparent, secure, and efficient funding mechanisms.
 
-## Features
+🌟 Project Vision
+Foundry revolutionizes crowdfunding by leveraging the power of blockchain technology to create a trustless, transparent, and efficient platform where:
 
-- 🚀 **Project Launch**: Multi-step wizard for launching blockchain projects
-- 💰 **Crowdfunding**: Support projects with tiered or custom backing
-- 🔗 **SuiNS Integration**: **Mandatory** `.sui` domain registration for all projects
-- 💼 **Job Marketplace**: Post and apply for project-related jobs
-- 📊 **Analytics Dashboard**: Track project performance and funding
-- 🌐 **Walrus Storage**: Decentralized metadata storage
-- 🎨 **Modern UI**: Built with Radix UI and Tailwind CSS
+Creators can launch projects with confidence, knowing their funding is secure
+Backers can support projects they believe in with guaranteed refunds if goals aren't met
+Communities can govern projects through decentralized voting mechanisms
+Developers can find opportunities through integrated job postings
+All participants benefit from the security and transparency of the Sui blockchain
+✨ Key Features
+🚀 Core Functionality
+Project Creation: Launch crowdfunding campaigns with rich metadata
+Secure Funding: Back projects with guaranteed refund protection
+Goal-based Funding: Automatic fund distribution when goals are met
+Deadline Management: Time-bound campaigns with automatic refunds
+Transparent Transactions: All activities recorded on-chain
+🏛️ Governance & Community
+Decentralized Voting: Project owners can create polls for community decisions
+Backer Participation: Only project backers can vote on governance proposals
+Transparent Results: Real-time vote counting and result display
+Community Feedback: Integrated feedback system for continuous improvement
+💼 Professional Features
+Job Postings: Project owners can post job opportunities
+Rich Metadata: Detailed project information stored on Walrus decentralized storage
+Social Integration: Social links and creator verification
+Milestone Tracking: Project progress and milestone management
+🔒 Security & Trust
+Smart Contract Security: Audited Move smart contracts
+Fund Protection: Automatic refunds if funding goals aren't met
+Owner Verification: Creator verification system
+Transparent Operations: All transactions visible on Sui blockchain
+🏗️ Architecture
+Smart Contracts (Move)
+Project Management: Create, fund, and manage crowdfunding projects
+Contribution Tracking: Secure contribution records with refund capabilities
+Governance System: Decentralized voting and decision-making
+Job Management: Post and manage project-related job opportunities
+Feedback System: Community feedback and rating mechanisms
+Frontend (React + TypeScript)
+Modern UI: Clean, responsive interface built with React and TypeScript
+Wallet Integration: Seamless Sui wallet connection via dApp Kit
+Real-time Updates: Live data synchronization with blockchain
+Mobile Responsive: Optimized for all device sizes
+Progressive Web App: Fast, reliable user experience
+Decentralized Storage (Walrus)
+Metadata Storage: Project descriptions, images, and rich content
+Content Addressing: Immutable content identifiers (CIDs)
+Distributed Network: Resilient, censorship-resistant storage
+Cost Effective: Efficient storage solution for large content
+🚀 Quick Start
+Prerequisites
+Before you begin, ensure you have the following installed:
 
-> **⚠️ Important**: SuiNS registration is now **mandatory** for project submission. If SuiNS registration fails, the entire project submission will be cancelled to prevent data inconsistency. See [MANDATORY_SUINS_FLOW_CONTROL.md](./MANDATORY_SUINS_FLOW_CONTROL.md) for details.
+Node.js (v18 or higher) - Download
+Sui CLI (v1.58 or higher) - Installation Guide
+Git - Download
+Installation
+Clone the repository
 
-## Technology Stack
+git clone https://github.com/y4hyya/Foundary.git
+cd Foundary
+Install dependencies
 
-- **Frontend**: React 18, TypeScript, Vite
-- **Blockchain**: Sui (testnet), SuiNS, Walrus
-- **UI Components**: Radix UI, Tailwind CSS, Motion
-- **State Management**: React Context API
-- **Forms**: React Hook Form
+# Install smart contract dependencies
+cd foundry
+sui move build
 
-## Running the Code
-
-### Prerequisites
-
-- Node.js 18+ and npm
-- A Sui wallet (for testnet)
-- Sufficient SUI tokens for gas and transactions
-
-### Installation
-
-```bash
-# Install dependencies
+# Install frontend dependencies
+cd ../frontend
 npm install
-```
+Configure environment
 
-### Environment Setup
+# Copy environment template
+cp .env.example .env
 
-Create a `.env` file in the project root:
+# Edit .env with your configuration
+nano .env
+Deploy smart contracts
 
-```env
-VITE_PACKAGE_ID=<your-sui-package-id>
-VITE_REGISTRY_ID=<your-registry-id>
-VITE_FOUNDRY_ID=<your-foundry-id>
-```
+# Switch to testnet
+sui client switch --env testnet
 
-### Development
+# Deploy contracts
+sui move build
+sui client publish --gas-budget 100000000
 
-```bash
-# Start the development server
+# Save the package ID from the output
+echo "PACKAGE_ID=0x..." >> .env
+Start the frontend
+
 npm run dev
-```
+Open your browser Navigate to http://localhost:5173
 
-The application will open at `http://localhost:3000`.
+📋 Detailed Setup Guide
+Smart Contract Setup
+Initialize Sui CLI
 
-### Build
+sui client new-address ed25519
+sui client switch --env testnet
+Get testnet SUI
 
-```bash
-# Build for production
-npm run build
-```
+Visit Sui Testnet Faucet
+Request testnet SUI for your address
+Deploy the contract
 
-## SuiNS Integration
+cd foundry
+sui move build
+sui client publish --gas-budget 100000000
+Update environment variables
 
-This project includes automatic SuiNS (Sui Name Service) registration for launched projects. When a project is submitted, a `.sui` domain is automatically registered and transferred to the founder, along with subnames for all team members.
+# In your .env file
+PACKAGE_ID=0x[YOUR_PACKAGE_ID]
+VITE_PACKAGE_ID=0x[YOUR_PACKAGE_ID]
+Frontend Setup
+Install dependencies
 
-For detailed documentation on the SuiNS integration, see [SUINS_INTEGRATION.md](./SUINS_INTEGRATION.md).
+cd frontend
+npm install
+Configure environment
 
-### Key Features:
-- **Primary Domain**: Automatic `.sui` domain registration for projects
-- **Team Subnames**: Automatic subname registration for team members (e.g., `foundry.co-founder`)
-- **Name Sanitization**: Automatic lowercase and hyphenation
-- **Price Calculation**: Dynamic pricing based on name length
-- **NFT Transfer**: Automatic transfer to project founder
-- **Error Handling**: Comprehensive non-blocking error handling
-- **Batch Processing**: Efficient team member registration with rate limiting
-- **Input Validation**: Multi-layered validation to prevent TypeError issues
+# Create .env file
+touch .env
 
-### Important Documentation:
-- 🚨 [MANDATORY_SUINS_FLOW_CONTROL.md](./MANDATORY_SUINS_FLOW_CONTROL.md) - **CRITICAL: Mandatory SuiNS registration flow control**
-- 📘 [SUINS_VALIDATION_ENHANCEMENT.md](./SUINS_VALIDATION_ENHANCEMENT.md) - **Preventing "TypeError: Invalid string value: undefined"**
-- 📋 [VALIDATION_QUICK_REFERENCE.md](./VALIDATION_QUICK_REFERENCE.md) - Quick troubleshooting guide
-- 📚 [SUINS_INTEGRATION.md](./SUINS_INTEGRATION.md) - Complete integration details
-- 🔧 [TEAM_SUBNAMES_DOCUMENTATION.md](./TEAM_SUBNAMES_DOCUMENTATION.md) - Team subnames feature
+# Add your configuration
+echo "VITE_PACKAGE_ID=0x[YOUR_PACKAGE_ID]" >> .env
+echo "VITE_WALRUS_PUBLISHER_URL=https://publisher.walrus-testnet.walrus.space" >> .env
+echo "VITE_WALRUS_AGGREGATOR_URL=https://aggregator.walrus-testnet.walrus.space" >> .env
+Start development server
 
-### Team Subnames
-Each team member automatically gets a subname in the format `{projectName}.{memberRole}`:
-- Co-founder → `foundry.co-founder`
-- Developer → `foundry.developer`
-- Designer → `foundry.designer`
-
-See [TEAM_SUBNAMES_DOCUMENTATION.md](./TEAM_SUBNAMES_DOCUMENTATION.md) for details.
-
-## Project Structure
-
-```
-Foundry/
-├── src/
-│   ├── components/        # React components
-│   │   ├── ui/           # Reusable UI components (Radix)
-│   │   └── *.tsx         # Feature components
-│   ├── contexts/         # React Context providers
-│   ├── lib/              # Utility functions
-│   │   ├── suins-utils.ts        # SuiNS integration utilities
-│   │   └── theme-colors.ts       # Theme configuration
-│   ├── styles/           # Global styles
-│   ├── App.tsx           # Main application component
-│   └── main.tsx          # Application entry point
-├── SUINS_INTEGRATION.md  # SuiNS integration documentation
-└── package.json
-```
-
-## Key Components
-
-- **LaunchProjectPage**: 4-step wizard for project creation
-- **ProjectsPage**: Browse and filter projects
-- **ProjectDetailsPage**: View project details and back projects
-- **StatsPage**: Analytics and statistics dashboard
-- **WalletContext**: Wallet connection management
-- **ThemeContext**: Light/dark theme management
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-[Add your license here]
-
-## Support
-
-For issues or questions:
-
-### Common Errors
-
-**"TypeError: Invalid string value: undefined"**
-- See [VALIDATION_QUICK_REFERENCE.md](./VALIDATION_QUICK_REFERENCE.md) for immediate troubleshooting
-- Check [SUINS_VALIDATION_ENHANCEMENT.md](./SUINS_VALIDATION_ENHANCEMENT.md) for detailed explanation
-- Ensure wallet is connected before submitting project
-- Verify project name is not empty
-
-### General Troubleshooting
-- Check the [SUINS_INTEGRATION.md](./SUINS_INTEGRATION.md) for SuiNS-related issues
-- Review browser console logs for detailed error messages
-- Ensure environment variables are configured correctly (see [ENV_SETUP_GUIDE.md](./ENV_SETUP_GUIDE.md))
-- Verify wallet connection status
+npm run dev

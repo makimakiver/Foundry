@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useForm } from "react-hook-form@7.55.0";
+import { useForm } from "react-hook-form";
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { walrus, WalrusFile } from '@mysten/walrus';
@@ -21,7 +21,6 @@ import {
   Plus,
   X,
   Upload,
-  Calendar,
   DollarSign,
   FileText,
   Users,
@@ -34,7 +33,7 @@ import {
   Lock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
@@ -108,17 +107,29 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     "Social",
     "Developer Tools",
   ];
-  const MIST_PER_SUI = BigInt(1_000_000_000);
-  function formatSui(mist: bigint): string {
-    const int = mist / MIST_PER_SUI;
-    const frac = (mist % MIST_PER_SUI).toString().padStart(9, '0').replace(/0+$/, '');
-    return frac ? `${int}.${frac}` : `${int}`;
-  }
-
   const onSubmit = async(data: ProjectFormData) => {
+    // CRITICAL DEBUGGING: Log the complete currentAccount object structure
+    console.log('========================================');
+    console.log('WALLET CONNECTION DEBUG');
+    console.log('========================================');
+    console.log('currentAccount object:', currentAccount);
+    console.log('currentAccount type:', typeof currentAccount);
+    console.log('currentAccount keys:', currentAccount ? Object.keys(currentAccount) : 'null');
+    console.log('currentAccount.address:', currentAccount?.address);
+    console.log('currentAccount.address type:', typeof currentAccount?.address);
+    console.log('========================================');
+    
     if(!currentAccount) {
       console.log('Did not connect!!');
       toast.error('Please connect your wallet to launch a project');
+      return;
+    }
+    
+    // Additional validation: Check if address property exists
+    if (!currentAccount.address) {
+      console.error('❌ CRITICAL: currentAccount exists but address is missing!');
+      console.error('   currentAccount structure:', JSON.stringify(currentAccount, null, 2));
+      toast.error('Wallet address not available. Please reconnect your wallet.');
       return;
     }
     
@@ -150,7 +161,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       
     const registerTx = flow.register({
       epochs: 3,
-      owner: currentAccount.address,
+      owner: currentAccount?.address || '',
       deletable: true,
     });
       
@@ -172,7 +183,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           o.type === 'created' &&
           ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
       ) ?? null;
-    const blob_objectId = blobChange?.objectId;
+    const blob_objectId = (blobChange as any)?.objectId;
       
       // Validate blob creation
       if (!blob_objectId) {
@@ -240,7 +251,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
         const wrappedSignAndExecute = async (params: { transaction: Transaction; chain?: string }) => {
           console.log('🔄 Executing transaction with params:', params);
           try {
-            const result = await signAndExecuteTransaction(params);
+            const result = await signAndExecuteTransaction(params as any);
             console.log('✅ Transaction executed successfully:', result);
             return result;
           } catch (txError) {
@@ -320,7 +331,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
             teamMembersForSubnames,
             suinsResult.nftObjectId,
             suinsClient,
-            signAndExecuteTransaction
+            signAndExecuteTransaction as any
           );
           
           if (teamSubnamesResult.success) {
@@ -351,12 +362,12 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     suinsTx.createLeafSubName({
         parentNft: subNameNft,
         name: "founder",
-        targetAddress: currentAccount.address,
+        targetAddress: currentAccount?.address || '',
     });
           
           await signAndExecuteTransaction({
             transaction: tx,
-            chain: 'sui:testnet',
+            chain: 'sui:testnet' as `${string}:${string}`,
           });
           
           toast.dismiss();
@@ -402,7 +413,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     signAndExecuteTransaction(
       {
         transaction: tx,
-        chain: 'sui:testnet',
+        chain: 'sui:testnet' as `${string}:${string}`,
       },
       {
         onSuccess: (result) => {
@@ -449,7 +460,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
 
   const removeTeamMember = (index: number) => {
     const current = watchedData.teamMembers || [];
-    setValue("teamMembers", current.filter((_, i) => i !== index));
+    setValue("teamMembers", current.filter((_: any, i: number) => i !== index));
   };
 
   const addMilestone = () => {
@@ -459,7 +470,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
 
   const removeMilestone = (index: number) => {
     const current = watchedData.milestones || [];
-    setValue("milestones", current.filter((_, i) => i !== index));
+    setValue("milestones", current.filter((_: any, i: number) => i !== index));
   };
 
   const addSocialLink = () => {
@@ -469,10 +480,10 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
 
   const removeSocialLink = (index: number) => {
     const current = watchedData.socialLinks || [];
-    setValue("socialLinks", current.filter((_, i) => i !== index));
+    setValue("socialLinks", current.filter((_: any, i: number) => i !== index));
   };
 
-  const handleImageFile: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  const handleImageFile = (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
@@ -483,7 +494,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     setValue("image", url);
   };
 
-  const handleDrop: React.DragEventHandler<HTMLDivElement> = (e) => {
+  const handleDrop = (e: any) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -495,13 +506,13 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     setValue("image", url);
   };
 
-  const handleDragOver: React.DragEventHandler<HTMLDivElement> = (e) => {
+  const handleDragOver = (e: any) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   };
 
-  const handleDragLeave: React.DragEventHandler<HTMLDivElement> = () => {
+  const handleDragLeave = () => {
     setIsDragging(false);
   };
 
@@ -527,6 +538,28 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
             Submit your project to Foundry³ and get funded by the community
           </p>
         </motion.div>
+
+        {/* Wallet Status Debug Info */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mb-6 p-4 bg-card border border-border rounded-lg">
+            <h3 className="text-sm font-semibold text-foreground mb-2">🔍 Wallet Connection Debug</h3>
+            <div className="text-xs space-y-1 text-muted-foreground">
+              <div>Connected: {currentAccount ? '✅ Yes' : '❌ No'}</div>
+              <div>Address: {currentAccount?.address || '❌ Not available'}</div>
+              <div>Address Type: {typeof currentAccount?.address}</div>
+              {currentAccount && (
+                <div className="mt-2">
+                  <details>
+                    <summary className="cursor-pointer text-[#00E0FF]">Show full account object</summary>
+                    <pre className="mt-2 p-2 bg-background rounded text-[10px] overflow-auto">
+                      {JSON.stringify(currentAccount, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Progress Bar */}
         <motion.div
@@ -642,7 +675,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                         Category *
                       </Label>
                       <Select
-                        onValueChange={(value) => setValue("category", value)}
+                        onValueChange={(value: string) => setValue("category", value)}
                       >
                         <SelectTrigger className="">
                           <SelectValue placeholder="Select a category" />
@@ -835,12 +868,12 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                       </div>
                       
                       <div className="space-y-4">
-                        {(watchedData.teamMembers || []).map((member, index) => (
+                        {(watchedData.teamMembers || []).map((_member: any, index: number) => (
                           <div key={index} className="flex gap-2">
                             <Input placeholder="Address" {...register(`teamMembers.${index}.name`)} className="" />
                             <Select
                               value={watchedData.teamMembers?.[index]?.role || undefined}
-                              onValueChange={(value) => setValue(`teamMembers.${index}.role`, value)}
+                              onValueChange={(value: string) => setValue(`teamMembers.${index}.role`, value)}
                             >
                               <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="Select role" />
@@ -891,7 +924,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                       </div>
                       
                       <div className="space-y-3">
-                        {(watchedData.socialLinks || []).map((link, index) => {
+                        {(watchedData.socialLinks || []).map((link: any, index: number) => {
                           const getPlatformIcon = (platform: string) => {
                             switch (platform) {
                               case "twitter":
@@ -934,7 +967,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                                 </div>
                                 <Select
                                   defaultValue={link.platform}
-                                  onValueChange={(value) => setValue(`socialLinks.${index}.platform`, value)}
+                                  onValueChange={(value: string) => setValue(`socialLinks.${index}.platform`, value)}
                                 >
                                   <SelectTrigger className="w-[140px]">
                                     <SelectValue />
@@ -1047,7 +1080,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                     </div>
                     
                     <div className="space-y-4">
-                      {(watchedData.milestones || []).map((milestone, index) => (
+                      {(watchedData.milestones || []).map((_milestone: any, index: number) => (
                         <Card key={index} className="p-4 bg-card border-border">
                           <div className="flex items-start justify-between mb-3">
                             <Badge className="bg-[#00E0FF]/20 text-[#00E0FF] border-[#00E0FF]/30">
@@ -1098,7 +1131,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                     <p className="text-muted-foreground text-sm">Choose if your investors’ activity appears publicly on your project page.</p>
                     <RadioGroup
                       value={historyVisibility}
-                      onValueChange={(v) => setHistoryVisibility(v as "public" | "private")}
+                      onValueChange={(v: string) => setHistoryVisibility(v as "public" | "private")}
                       className="grid grid-cols-2 gap-3"
                     >
                       <div>

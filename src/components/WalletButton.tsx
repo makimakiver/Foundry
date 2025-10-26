@@ -34,6 +34,9 @@ export function WalletButton({
   const disconnect = useDisconnectWallet();
   const account = useCurrentAccount();
 
+  // Debug logging for wallet connection
+  console.log('WalletButton - account:', account);
+  console.log('WalletButton - account.address:', account?.address);
 
   if (!account) {
     return (

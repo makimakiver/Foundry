@@ -46,8 +46,11 @@ Wallet Integration: Seamless Sui wallet connection via dApp Kit
 Real-time Updates: Live data synchronization with blockchain
 Mobile Responsive: Optimized for all device sizes
 Progressive Web App: Fast, reliable user experience
-Decentralized Storage (Walrus)
-Metadata Storage: Project descriptions, images, and rich content
+Decentralized Storage (Walrus + Pinata IPFS)
+Metadata Storage: Project descriptions and rich content on Walrus
+Image Storage: Project images stored on IPFS via Pinata
+Permanent Storage: Decentralized, censorship-resistant file storage
+Fast Access: Optimized gateway for quick image loading
 Content Addressing: Immutable content identifiers (CIDs)
 Distributed Network: Resilient, censorship-resistant storage
 Cost Effective: Efficient storage solution for large content
@@ -74,11 +77,19 @@ cd ../frontend
 npm install
 Configure environment
 
-# Copy environment template
-cp .env.example .env
+# Create local environment file
+touch .env.local
 
-# Edit .env with your configuration
-nano .env
+# Add required environment variables (see ENV_VARIABLES.md for details)
+# Required variables:
+# - VITE_PACKAGE_ID
+# - VITE_REGISTRY_ID
+# - VITE_FOUNDRY_ID
+# - VITE_PUBLISHER
+# - VITE_PINATA_JWT (for IPFS image storage)
+# - VITE_PINATA_GATEWAY (for IPFS image storage)
+
+# See PINATA_SETUP.md for Pinata configuration instructions
 Deploy smart contracts
 
 # Switch to testnet

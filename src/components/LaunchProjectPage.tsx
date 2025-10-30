@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { walrus, WalrusFile } from '@mysten/walrus';
-import { SuinsClient, SuinsTransaction } from '@mysten/suins';
+import { SuinsClient } from '@mysten/suins';
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
@@ -35,9 +35,9 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
-import { useCurrentAccount, useSignAndExecuteTransaction, useSignTransaction } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
-import { handleSuiNameRegistration, registerTeamSubnames } from "../lib/suins-utils";
+import { uploadImageToPinata, isPinataConfigured } from "../lib/pinata";
 
 interface ProjectFormData {
   name: string;
@@ -67,10 +67,12 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [historyVisibility, setHistoryVisibility] = useState<"public" | "private">("private");
+  const [uploadedImageFile, setUploadedImageFile] = useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const totalSteps = 4;
 
-  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<ProjectFormData>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<ProjectFormData>({
     defaultValues: {
       teamMembers: [{ name: "", role: "" }],
       milestones: [{ title: "", description: "", amount: "" }],
@@ -245,126 +247,84 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       console.log('  - signAndExecuteTransaction:', typeof signAndExecuteTransaction);
       console.log('  - client:', client);
       
-      let registrationSuccess = true;
-      let suinsResult;
-      
-      // try {
-      //   // Wrap signAndExecuteTransaction to ensure proper parameter handling
-      //   const wrappedSignAndExecute = async (params: { transaction: Transaction; chain?: string }) => {
-      //     console.log('🔄 Executing transaction with params:', params);
-      //     try {
-      //       const result = await signAndExecuteTransaction(params as any);
-      //       console.log('✅ Transaction executed successfully:', result);
-      //       return result;
-      //     } catch (txError) {
-      //       console.error('❌ Transaction execution failed:', txError);
-      //       throw txError;
-      //     }
-      //   };
-        
-      //   suinsResult = await handleSuiNameRegistration(
-      //     projectName,
-      //     founderAddress,
-      //     suinsClient,
-      //     wrappedSignAndExecute,
-      //     client // Pass client to extract NFT object ID
-      //   );
-        
-      //   registrationSuccess = suinsResult.success;
-      //   console.log('SuiNS registration result:', suinsResult);
-        
-      // } catch (error) {
-      //   console.error('❌ SuiNS registration threw an exception:', error);
-      //   console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      //   registrationSuccess = false;
-      //   suinsResult = {
-      //     success: false,
-      //     error: error instanceof Error ? error.message : 'Unknown error during SuiNS registration'
-      //   };
-      // }
-      
-      // // ========================================================================
-      // // CRITICAL EXIT POINT: Enforce mandatory SuiNS registration
-      // // ========================================================================
-      // if (!registrationSuccess) {
-      //   console.error('========================================');
-      //   console.error('❌ SUINS REGISTRATION FAILED');
-      //   console.error('========================================');
-      //   console.error('Project submission CANCELLED to prevent data inconsistency');
-      //   console.error('Error details:', suinsResult?.error);
-      //   console.error('========================================');
-        
-      //   toast.dismiss();
-      //   toast.error(
-      //     `Project submission cancelled: SuiNS registration failed. ${suinsResult?.error || 'Please try again.'}`,
-      //     { duration: 6000 }
-      //   );
-        
-      //   // STOP - Do not proceed with project submission
-      //   return;
-      // }
-      
-      // // ========================================================================
-      // // SUCCESS: SuiNS registration completed successfully
-      // // ========================================================================
-      // console.log('========================================');
-      // console.log('✅ SUINS REGISTRATION SUCCESSFUL');
-      // console.log('========================================');
-      // console.log('  Transaction Digest:', suinsResult.digest);
-      // console.log('  NFT Object ID:', suinsResult.nftObjectId);
-      // console.log('  Proceeding with project submission...');
-      // console.log('========================================');
-      
-   
-      
-      
-    //   // Step 4: Create subname for founder (optional, under foundry parent if available)
-    //   if (foundry) {
-    //     try {
-    //       toast.loading('Creating founder subname...');
-    //       const tx = new Transaction();
-    //       const suinsTx = new SuinsTransaction(suinsClient, tx);
-          
-    // const subNameNft = suinsTx.createSubName({
-    //     parentNft: tx.object(foundry),
-    //     name: data.name,
-    //     expirationTimestampMs: 1735132800000,
-    //     allowChildCreation: true,
-    //     allowTimeExtension: true,
-    // });
-          
-    // suinsTx.createLeafSubName({
-    //     parentNft: subNameNft,
-    //     name: "founder",
-    //     targetAddress: currentAccount?.address || '',
-    // });
-          
-    //       await signAndExecuteTransaction({
-    //         transaction: tx,
-    //         chain: 'sui:testnet' as `${string}:${string}`,
-    //       });
-          
-    //       toast.dismiss();
-    //       toast.success('Founder subname created!');
-    //     } catch (error) {
-    //       console.warn('Subname creation failed:', error);
-    //       toast.dismiss();
-    //     }
-    //   }
-      
-    //   // Step 5: Submit project to the Foundry smart contract
-    //   toast.loading('Submitting project to Foundry...');
-      
-    //   // Final validation before smart contract call
-    //   if (!blob_objectId) {
-    //     throw new Error('Blob object ID is missing. Cannot submit project.');
-    //   }
-      
-    //   // Generate the SuiNS name (same sanitization as used in SuiNS registration)
-    //   const suinsName = `${projectName.toLowerCase().replace(/\s+/g, '-')}.sui`;
-    //   console.log('Submitting project with SuiNS name:', suinsName);
-      
       const tx = new Transaction();
+      try {
+
+        
+        const subName       = data.name + '.foundry.sui';
+        const founder_subdomain = 'founder.' + subName;
+        const expirationMs  = 1792963031733;
+        ; // ensure the Move fn expects ms; if seconds, divide by 1000n
+        const parentNftId   = '0xb65554e77d3c489ae3f232b49106ee77e1d903a279b10bc4414e1d794465cb66';
+        const subnamePkg    = '0x3c272bc45f9157b7818ece4f7411bdfa8af46303b071aca4e18c03119c9ff636';
+        const subname_proxyPkg = "0x295a0749dae0e76126757c305f218f929df0656df66a6361f8b6c6480a943f12"
+        const suinsShared   = '0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3';
+        const clockId       = '0x6';
+
+        // One TX only
+
+        console.log('[1] building moveCall…');
+        const subnameNft = tx.moveCall({
+          target: `${subnamePkg}::subdomains::new`,
+          arguments: [
+            tx.object(suinsShared),       // shared object
+            tx.object(parentNftId),       // must be owned by sender or have the required cap
+            tx.object(clockId),
+            tx.pure.string(subName),
+            tx.pure.u64(expirationMs),    // check units: ms vs sec
+            tx.pure.bool(true),
+            tx.pure.bool(true),
+          ],
+        });
+        console.log('[2] transfer to receiver…');
+        const extrasubnameNft = tx.moveCall({
+          target: `${subname_proxyPkg}::subdomain_proxy::new`,
+          arguments: [
+            tx.object(suinsShared),       // shared object
+            tx.object(subnameNft),       // must be owned by sender or have the required cap
+            tx.object(clockId),
+            tx.pure.string(founder_subdomain),
+            tx.pure.u64(1792963031733),    // check units: ms vs sec
+            tx.pure.bool(true),
+            tx.pure.bool(false),
+          ],
+        });
+        console.log('[2] transfer to receiver…');
+        tx.transferObjects([subnameNft], tx.pure.address(currentAccount.address)); // transfer it to the project
+        tx.transferObjects([extrasubnameNft], tx.pure.address(currentAccount.address));
+        toast.dismiss();
+        toast.success('Subdomain is transferred successfully!');
+      }
+      
+      // ========================================================================
+      // CRITICAL EXIT POINT: Enforce mandatory SuiNS registration
+      // ========================================================================
+      catch(error) {
+        console.error('========================================');
+        console.error('❌ SUINS REGISTRATION FAILED');
+        console.error('========================================');
+        console.error('Project submission CANCELLED to prevent data inconsistency');
+        console.error('Error details:', error);
+        console.error('========================================');
+        
+        toast.dismiss();
+        toast.error(
+          `Project submission cancelled: SuiNS registration failed. ${error || 'Please try again.'}`,
+          { duration: 6000 }
+        );
+        
+        // STOP - Do not proceed with project submission
+        return;
+      }
+      
+      // ========================================================================
+      // SUCCESS: SuiNS registration completed successfully
+      // ========================================================================
+      console.log('========================================');
+      console.log('✅ SUINS REGISTRATION SUCCESSFUL');
+      console.log('========================================');
+      console.log('  Proceeding with project submission...');
+      console.log('========================================');
       
       // Split coins for funding goal
       // const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
@@ -373,25 +333,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       // Note: This assumes the smart contract has been updated to accept the SuiNS name parameter
       // If the contract hasn't been updated yet, you'll need to update it to accept this additional parameter
     // const tx = new Transaction();
-    console.log('Uploading data to Walrus...');
-    const PUBLISHER = import.meta.env.VITE_PUBLISHER;
-    const text = JSON.stringify(data);
-    const sealed_data = new TextEncoder().encode(text);
-    const res = await fetch(`${PUBLISHER}/v1/blobs?epochs=10`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "text/plain",
-      },
-      body: sealed_data,
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Upload failed: ${res.status} ${res.statusText} ${text}`);
-    }
-    const fetched_data = await res.json();
-    const blob_id = fetched_data?.newlyCreated.blobObject.blobId;
-    console.log('Blob ID:', blob_id);
+   
     tx.moveCall({
         target: `${vendor}::ideation::suggest_idea`,
         arguments: [
@@ -400,7 +342,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           tx.object(blob_objectId),           // SuiNS name (e.g., "my-project.sui")
           tx.pure.string(data.image || ''),
           tx.pure.u64(data.fundingGoal),
-          tx.pure.string(blob_id),
+          tx.pure.string('blob_id'),
           tx.pure.string(data.category || ''),
         ]
       });
@@ -461,12 +403,26 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
   const handleImageFile = (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image size must be less than 10MB');
+      return;
+    }
+    
     const url = URL.createObjectURL(file);
     // Clean up any previous object URL
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImagePreview(url);
-    // Store preview URL in the form for consistency
-    setValue("image", url);
+    setUploadedImageFile(file);
+    // Don't set the form value yet - will be set after Pinata upload
+    console.log('📷 Image selected:', file.name, `(${(file.size / 1024 / 1024).toFixed(2)}MB)`);
   };
 
   const handleDrop = (e: any) => {
@@ -475,10 +431,56 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image size must be less than 10MB');
+      return;
+    }
+    
     const url = URL.createObjectURL(file);
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImagePreview(url);
-    setValue("image", url);
+    setUploadedImageFile(file);
+    console.log('📷 Image dropped:', file.name, `(${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+  };
+
+  const handleUploadToPinata = async () => {
+    if (!uploadedImageFile) {
+      toast.error('Please select an image first');
+      return;
+    }
+
+    if (!isPinataConfigured()) {
+      toast.error('Pinata is not configured. Please add VITE_PINATA_JWT and VITE_PINATA_GATEWAY to your environment variables.');
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      toast.loading('Uploading image to IPFS...');
+      
+      const ipfsUrl = await uploadImageToPinata(uploadedImageFile);
+      
+      // Store the IPFS URL in the form
+      setValue("image", ipfsUrl);
+      
+      toast.dismiss();
+      toast.success('Image uploaded to IPFS successfully! 🎉');
+      console.log('✅ IPFS URL stored:', ipfsUrl);
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      toast.dismiss();
+      toast.error(error instanceof Error ? error.message : 'Failed to upload image to IPFS');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleDragOver = (e: any) => {
@@ -708,8 +710,46 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                         onChange={handleImageFile}
                         className="hidden"
                       />
-                      <p className="text-muted-foreground text-xs mt-1">
-                        Upload a cover image (displayed at 320×180, 16:9)
+                      
+                      {/* Upload to IPFS Button */}
+                      {uploadedImageFile && !watchedData.image?.startsWith('http') && (
+                        <div className="mt-3 flex items-center gap-3">
+                          <Button
+                            type="button"
+                            onClick={handleUploadToPinata}
+                            disabled={isUploadingImage}
+                            className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                          >
+                            {isUploadingImage ? (
+                              <>
+                                <div className="animate-spin mr-2 h-4 w-4 border-2 border-[#0D0E10] border-t-transparent rounded-full" />
+                                Uploading to IPFS...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-4 h-4 mr-2" />
+                                Upload to IPFS
+                              </>
+                            )}
+                          </Button>
+                          {uploadedImageFile && (
+                            <span className="text-xs text-muted-foreground">
+                              {uploadedImageFile.name} ({(uploadedImageFile.size / 1024 / 1024).toFixed(2)}MB)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Success message when uploaded */}
+                      {watchedData.image?.startsWith('http') && (
+                        <div className="mt-3 flex items-center gap-2 text-sm text-[#00FFA3]">
+                          <Check className="w-4 h-4" />
+                          <span>Image uploaded to IPFS successfully!</span>
+                        </div>
+                      )}
+                      
+                      <p className="text-muted-foreground text-xs mt-2">
+                        Upload a cover image (displayed at 320×180, 16:9). Image will be stored on IPFS via Pinata.
                       </p>
                     </div>
                   </div>

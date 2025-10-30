@@ -7,7 +7,7 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Search, SlidersHorizontal, Rocket } from "lucide-react";
 import { motion } from "motion/react";
-import bgImage from "../assets/background4.jpeg";
+import bgImage from "../assets/background3.png";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { walrus } from "@mysten/walrus";

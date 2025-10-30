@@ -58,9 +58,13 @@ interface LaunchProjectPageProps {
 }
 
 export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps) {
+  const parentNftId   = import.meta.env.VITE_FOUNDRY_NS_ID;
+  const subnamePkg    = import.meta.env.VITE_SUINS_SUBDOMAIN_PACKAGE_ID;
+  const subname_proxyPkg = import.meta.env.VITE_SUINS_SUBDOMAIN_PROXY_PACKAGE_ID;
+  const suinsShared   = import.meta.env.VITE_SUINS_SHARED_OBJECT_ID;
+  const clockId       = '0x6';
   const vendor = import.meta.env.VITE_PACKAGE_ID;
   const registry = import.meta.env.VITE_REGISTRY_ID;
-  const foundry = import.meta.env.VITE_FOUNDRY_ID;
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const [currentStep, setCurrentStep] = useState(1);
@@ -140,7 +144,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     // Validate environment variables
     if (!vendor || !registry) {
       toast.error('Environment variables not configured. Please set VITE_PACKAGE_ID and VITE_REGISTRY_ID in your .env file');
-      console.error('Missing environment variables:', { vendor, registry, foundry });
+      console.error('Missing environment variables:', { vendor, registry });
       return;
     }
     
@@ -249,17 +253,10 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       
       const tx = new Transaction();
       try {
-
-        
         const subName       = data.name + '.foundry.sui';
         const founder_subdomain = 'founder.' + subName;
         const expirationMs  = 1792963031733;
         ; // ensure the Move fn expects ms; if seconds, divide by 1000n
-        const parentNftId   = '0xb65554e77d3c489ae3f232b49106ee77e1d903a279b10bc4414e1d794465cb66';
-        const subnamePkg    = '0x3c272bc45f9157b7818ece4f7411bdfa8af46303b071aca4e18c03119c9ff636';
-        const subname_proxyPkg = "0x295a0749dae0e76126757c305f218f929df0656df66a6361f8b6c6480a943f12"
-        const suinsShared   = '0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3';
-        const clockId       = '0x6';
 
         // One TX only
 
@@ -289,13 +286,56 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
             tx.pure.bool(false),
           ],
         });
-        console.log('[2] transfer to receiver…');
-        tx.transferObjects([subnameNft], tx.pure.address(currentAccount.address)); // transfer it to the project
         tx.transferObjects([extrasubnameNft], tx.pure.address(currentAccount.address));
+        console.log('[2] transfer to receiver…');
+        console.log(data.teamMembers)
+        if (data.teamMembers.length > 0 && data.teamMembers[0].name !== ''){
+          console.log('hello')
+          for (const member of data.teamMembers) {
+            const memberSubname = member.role+'.'+subName;
+            const memberSubnameNft = tx.moveCall({
+              target: `${subname_proxyPkg}::subdomain_proxy::new`,
+              arguments: [
+                tx.object(suinsShared),       // shared object
+                tx.object(subnameNft),       // must be owned by sender or have the required cap
+                tx.object(clockId),
+                tx.pure.string(memberSubname),
+                tx.pure.u64(1792963031733),    // check units: ms vs sec
+                tx.pure.bool(true),
+                tx.pure.bool(false),
+              ],
+            });
+            tx.transferObjects([memberSubnameNft], tx.pure.address(member.name));
+          }
+        }
         toast.dismiss();
         toast.success('Subdomain is transferred successfully!');
+        // ========================================================================
+        // SUCCESS: SuiNS registration completed successfully
+        // ========================================================================
+        console.log('========================================');
+        console.log('✅ SUINS REGISTRATION SUCCESSFUL');
+        console.log('========================================');
+        console.log('  Proceeding with project submission...');
+        console.log('========================================');
+        console.log('[3] calling create_project...');
+        const project_address = tx.moveCall({
+          target: `${vendor}::ideation::create_project`,
+          arguments: [
+            tx.object(registry),
+            tx.pure.string(data.name),           // Original project name
+            tx.object(blob_objectId),           // SuiNS name (e.g., "my-project.sui")
+            tx.pure.string(data.image || ''),
+            tx.pure.u64(data.fundingGoal),
+            tx.pure.string(data.category || '')
+          ]
+        });
+        tx.transferObjects([subnameNft], project_address); // transfer it to the project
+        signAndExecuteTransaction({ transaction: tx });
+        toast.dismiss();
+        toast.success('Project submitted successfully');
+        onProjectSubmitted();
       }
-      
       // ========================================================================
       // CRITICAL EXIT POINT: Enforce mandatory SuiNS registration
       // ========================================================================
@@ -317,14 +357,6 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
         return;
       }
       
-      // ========================================================================
-      // SUCCESS: SuiNS registration completed successfully
-      // ========================================================================
-      console.log('========================================');
-      console.log('✅ SUINS REGISTRATION SUCCESSFUL');
-      console.log('========================================');
-      console.log('  Proceeding with project submission...');
-      console.log('========================================');
       
       // Split coins for funding goal
       // const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
@@ -332,24 +364,8 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       // Call the smart contract to register the project
       // Note: This assumes the smart contract has been updated to accept the SuiNS name parameter
       // If the contract hasn't been updated yet, you'll need to update it to accept this additional parameter
-    // const tx = new Transaction();
-   
-    tx.moveCall({
-        target: `${vendor}::ideation::suggest_idea`,
-        arguments: [
-          tx.object(registry),
-          tx.pure.string(data.name),           // Original project name
-          tx.object(blob_objectId),           // SuiNS name (e.g., "my-project.sui")
-          tx.pure.string(data.image || ''),
-          tx.pure.u64(data.fundingGoal),
-          tx.pure.string('blob_id'),
-          tx.pure.string(data.category || ''),
-        ]
-      });
-      signAndExecuteTransaction({ transaction: tx });
-      toast.dismiss();
-      toast.success('Project submitted successfully');
-      onProjectSubmitted();
+      // const tx = new Transaction();
+      
     } catch (error) {
       console.error('Error during project submission:', error);
       toast.dismiss();

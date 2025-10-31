@@ -10,7 +10,8 @@ import { motion } from "motion/react";
 import bgImage from "../assets/background3.png";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { getFullnodeUrl } from "@mysten/sui/client";
-import { walrus } from "@mysten/walrus";
+import { blobIdFromInt, walrus } from "@mysten/walrus";
+import { walrusImageUrl } from "../lib/walrus_utils";
 
 class Project {
   id: string;
@@ -97,11 +98,11 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
         options: { showContent: true },
         id: projectId,
       });
-      const ideas: any[] = (project_struct as any)?.data?.content?.fields?.ideas ?? [];
+      const projects: any[] = (project_struct as any)?.data?.content?.fields?.projects ?? [];
       const parsed: Project[] = [];
-      if (Array.isArray(ideas)) {
-        for (let i = 0; i < ideas.length; i++) {
-          const idea = ideas[i];
+      if (Array.isArray(projects)) {
+        for (let i = 0; i < projects.length; i++) {
+          const idea = projects[i];
           const idea_struct = await client.getObject({
             options: { showContent: true },
             id: idea,
@@ -109,20 +110,26 @@ export function ProjectsPage({ onLaunchProject, onViewProject }: ProjectsPagePro
           const idea_struct_fields: any[] = (idea_struct as any)?.data?.content?.fields ?? idea_struct;
           console.log(idea_struct_fields);
           const f = (idea_struct as any)?.data?.content?.fields;
+          const project_name = f?.title.toLowerCase().endsWith('.sui') 
+          ? f?.title.slice(0, -4) 
+          : f?.title;
+          const imageFileName = `${project_name}-image`;
+          const imageUrls = await walrusImageUrl(blobIdFromInt(f?.details.fields.blob_id).toString(), imageFileName);
+          const imageUrl = imageUrls.blobUrl;
+          const imageDirectUrl = imageUrls.directUrl;
           // Try to fetch details blob (optional)
-          console.log('project_id: ', f?.id);
           const p = new Project({
             id: f?.id?.id ?? f?.id ?? idea,
             name: String(f?.title ?? ''),
             description: String(''),
             category: String(f?.category ?? 'DeFi'),
-            image: String(f?.image ?? ''),
+            image: String(imageDirectUrl ?? ''),
             fundingGoal: Number(f?.fundingGoal ?? f?.funding_goal ?? 0),
             currentFunding: 0,
             backers: 0,
             daysLeft: 30,
             status: 'live',
-            detailsBlobId: String(f?.blob_id ?? ''),
+            detailsBlobId: String(f?.details.fields.blob_id ?? ''),
           });
           parsed.push(p);
         }

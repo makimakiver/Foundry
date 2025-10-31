@@ -30,7 +30,8 @@ import {
   MessageCircle,
   Globe,
   Send,
-  Lock
+  Lock,
+  AlertCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -148,21 +149,74 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       return;
     }
     
+    // Validate that an image file has been uploaded
+    if (!uploadedImageFile) {
+      toast.error('Please upload a project image before submitting');
+      console.error('No image file selected');
+      return;
+    }
+    
+    const nameRecord = await suinsClient.getNameRecord(data.name + ".sui");
+    console.log(nameRecord);
+    if(nameRecord) {
+      const owner = await client.getObject({
+        id: nameRecord.nftId,
+        options: {
+          showOwner: true
+        }
+      });
+      const address = owner?.data?.owner?.AddressOwner;
+      if (address == currentAccount.address) {
+        toast.dismiss();
+        toast.success('Scam test is passed successfully!');
+      }
+      else{
+        toast.error('Scam test is failed!');
+      }
+    }
+    
     try {
       console.log('Starting project submission...');
       
       // Step 1: Prepare and upload project metadata to Walrus
       toast.loading('Preparing project metadata...');
-    const json = JSON.stringify(data);
-      const fileData = new TextEncoder().encode(json);
-      
-    const flow = client.walrus.writeFilesFlow({
-      files: [
+    
+    // Include image file metadata in the JSON
+    const metadataWithImageInfo = {
+      ...data,
+      imageFileName: uploadedImageFile ? `${data.name}-image` : null,
+      imageFileSize: uploadedImageFile ? uploadedImageFile.size : null,
+      imageFileType: uploadedImageFile ? uploadedImageFile.type : null,
+    };
+    
+    const json = JSON.stringify(metadataWithImageInfo);
+    console.log('JSON with image metadata:', json);
+    const fileData = new TextEncoder().encode(json);
+    
+    // Prepare the files array for Walrus upload
+    const filesToUpload = [
+      WalrusFile.from({
+        contents: new Uint8Array(fileData),
+        identifier: `${data.name}-metadata.json`,
+      }),
+    ];
+    
+    // Add the actual image file to Walrus if it exists
+    if (uploadedImageFile) {
+      console.log('Adding image file to Walrus upload:', uploadedImageFile.name);
+      const imageBuffer = await uploadedImageFile.arrayBuffer();
+      filesToUpload.push(
         WalrusFile.from({
-          contents: new Uint8Array(fileData),
-            identifier: `${data.name}-metadata.json`,
-        }),
-      ],
+          contents: new Uint8Array(imageBuffer),
+          identifier: `${data.name}-image`,
+        })
+      );
+    } else {
+      console.warn('No image file selected. Only metadata will be uploaded to Walrus.');
+    }
+    
+    const flow = client.walrus.writeFilesFlow({
+      files: filesToUpload,
     });
       
     await flow.encode();
@@ -375,6 +429,18 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
   };
 
   const nextStep = () => {
+    // Validate Step 1: Basic Information - require image upload
+    if (currentStep === 1) {
+      if (!uploadedImageFile) {
+        toast.error('Please upload a project image before continuing');
+        return;
+      }
+      if (!watchedData.name || !watchedData.tagline || !watchedData.description || !watchedData.category) {
+        toast.error('Please fill in all required fields before continuing');
+        return;
+      }
+    }
+    
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
@@ -689,7 +755,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
 
                     <div>
                       <Label htmlFor="image" className="text-foreground mb-2">
-                        Project Image
+                        Project Image <span className="text-[#FF3366]">*</span>
                       </Label>
                       <div
                         role="button"
@@ -701,6 +767,8 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                         className={`w-[320px] h-[180px] rounded-md border-2 border-dotted flex items-center justify-center text-center px-4 transition-colors cursor-pointer select-none overflow-hidden ${
                           isDragging
                             ? "border-[#00E0FF] bg-[#00E0FF]/10"
+                            : uploadedImageFile
+                            ? "border-[#00FFA3] hover:border-[#00E0FF] hover:bg-[#00E0FF]/5"
                             : "border-border hover:border-[#00E0FF] hover:bg-[#00E0FF]/5"
                         }`}
                       >
@@ -765,8 +833,14 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                       )}
                       
                       <p className="text-muted-foreground text-xs mt-2">
-                        Upload a cover image (displayed at 320×180, 16:9). Image will be stored on IPFS via Pinata.
+                        <span className="text-[#FF3366]">* Required:</span> Upload a cover image (displayed at 320×180, 16:9). Image will be stored on Walrus decentralized storage.
                       </p>
+                      {!uploadedImageFile && (
+                        <p className="text-[#FF6B00] text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          Please upload an image to continue
+                        </p>
+                      )}
                     </div>
                   </div>
                 </Card>

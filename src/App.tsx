@@ -24,6 +24,8 @@ interface Project {
   backers: number;
   daysLeft: number;
   status: "live" | "upcoming" | "funded";
+  detailsBlobId?: string;
+  details?: any;
 }
 
 function AppContent() {

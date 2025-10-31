@@ -51,8 +51,8 @@ export function ProjectCard({
     <Card className="bg-card/80 border-border backdrop-blur-sm overflow-hidden group hover:border-[#00E0FF]/30 transition-all duration-300">
       {/* Image */}
       <div className="relative h-48 overflow-hidden">
-        <ImageWithFallback
-          src={image}
+        <img
+          src={image || ''}
           alt={name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />

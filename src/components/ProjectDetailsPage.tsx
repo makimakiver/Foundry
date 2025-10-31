@@ -41,7 +41,8 @@ import { Avatar, AvatarFallback } from "./ui/avatar";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { getFullnodeUrl } from "@mysten/sui/client";
-import { walrus } from "@mysten/walrus";
+import { blobIdFromInt, walrus } from "@mysten/walrus";
+import { walrusImageUrl } from "../lib/walrus_utils";
 // Note: We use parent-provided navigation instead of react-router.
 
 interface ProjectDetailsPageProps {
@@ -63,7 +64,9 @@ interface ProjectDetailsPageProps {
 }
 
 export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps) {
-  console.log('Project: ',project.id);
+  console.log('Project ID:', project.id);
+  console.log('Project Name:', project.name);
+  console.log('Project blob_id:', project.detailsBlobId);
   const currentAccount = useCurrentAccount();
   const walrusClient = useMemo(() => new SuiJsonRpcClient({
     url: getFullnodeUrl('testnet'),
@@ -73,6 +76,13 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
       uploadRelay: {
         host: 'https://upload-relay.testnet.walrus.space',
         sendTip: { max: 1_000 },
+      },
+      storageNodeClientOptions: {
+        fetch: (url, options) => {
+          console.log('fetching', url);
+          return fetch(url, options);
+        },
+        timeout: 60_000,
       },
       wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
     })
@@ -84,18 +94,63 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
   const [projectJobs, setProjectJobs] = useState<JobRequest[]>([]);
   const [details, setDetails] = useState<any | null>(project.details ?? null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+
   useEffect(() => {
     let mounted = true;
     async function loadDetails() {
+      console.log('Loading project details...');
+      console.log('Project name:', project.name);
+      console.log('Project blob_id:', project.detailsBlobId);
+      
       if (!project.details && project.detailsBlobId) {
         try {
           setLoadingDetails(true);
-          // const blob = await walrusClient.walrus.readBlob({ blobId: project.detailsBlobId });
-          // const parsed = typeof blob === 'string' ? JSON.parse(blob) : JSON.parse(String(blob));
-          // console.log(parsed.text());
+          const blobId = blobIdFromInt(project.detailsBlobId);
+          console.log('Converted blob_id:', blobId);
+          
+          const blob = await walrusClient.walrus.getBlob({ blobId });
+          console.log('Blob:', blob);
+          const files = await blob.files();
+          console.log('Files:', files);
+          console.log('Project name:', project.name);
+          
+          // Remove .sui extension from project name if present
+          const project_name = project.name.toLowerCase().endsWith('.sui') 
+            ? project.name.slice(0, -4) 
+            : project.name;
+          console.log('Project name without .sui:', project_name);
+          
+          // Get files by identifier (metadata.json file)
+          const [readme] = await blob.files({ identifiers: [`${project_name}-metadata.json`] });
+          const metadataJson = await readme.json();
+          console.log('Metadata:', metadataJson);
+          
+          // Retrieve the actual image file from Walrus if it exists
+          let imageUrl = project.image; // Default to original image
+          let imageDirectUrl = project.image; // For shareable links
+          
+          console.log('Blob ID:', blobId);
+          const imageUrls = await walrusImageUrl(blobId, metadataJson.imageFileType, metadataJson.imageFileName);
+          console.log('Image URLs:', imageUrls.blobUrl);
+          
+          imageUrl = imageUrls.blobUrl;
+          imageDirectUrl = imageUrls.directUrl;
+          
+          const parsed = {
+            projectName: project.name,
+            projectId: project.id,
+            blobId: project.detailsBlobId,
+            metadata: metadataJson,
+            imageUrl: imageDirectUrl,              // Blob URL for display
+            imageDirectUrl: imageDirectUrl,  // Direct Walrus URL for sharing
+            readmeContent: metadataJson.description || '',
+            files: files,
+          };
+          
+          console.log('Loaded project details from blob:', parsed);
           if (mounted) setDetails(parsed);
         } catch (e) {
-          console.warn('Failed to load project details blob', e);
+          console.warn('Failed to load project details blob for project:', project.name, e);
         } finally {
           if (mounted) setLoadingDetails(false);
         }
@@ -103,9 +158,9 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
     }
     loadDetails();
     return () => { mounted = false };
-  }, [project.details, project.detailsBlobId, walrusClient]);
+  }, [project.details, project.detailsBlobId, project.name, project.id, walrusClient]);
   const fundingPercentage = (project.currentFunding / project.fundingGoal) * 100;
-  const mergedDescription = project.description || details?.description || "";
+  const mergedDescription = details?.readmeContent || project.description || details?.description || "";
 
   const statusConfig = {
     live: { color: "bg-[#00FFA3]", text: "Live Now" },
@@ -355,12 +410,32 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
             >
               <Card className="overflow-hidden bg-card/80 border-border backdrop-blur-sm">
                 <div className="relative h-96">
-                  <ImageWithFallback
-                    src={project.image}
+                  <img
+                    src={details?.imageDirectUrl || project.image}
                     alt={project.name}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+                  
+                  {/* Walrus Image Link Button */}
+                  {details?.imageDirectUrl && (
+                    <div className="absolute top-6 right-6">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-background/80 backdrop-blur-sm border-[#00E0FF]/30 hover:bg-[#00E0FF]/10"
+                        onClick={() => {
+                          if (details?.imageDirectUrl) {
+                            navigator.clipboard.writeText(details.imageDirectUrl);
+                            toast.success('Walrus image URL copied to clipboard! 🎉');
+                          }
+                        }}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Copy Walrus Image URL
+                      </Button>
+                    </div>
+                  )}
                   
                   {/* Badges */}
                   <div className="absolute top-6 left-6 flex gap-3">

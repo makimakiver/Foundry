@@ -31,14 +31,20 @@ import {
   CheckCircle2,
   AlertCircle,
   Plus,
-  X
+  X,
+  MapPin
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignPersonalMessage } from "@mysten/dapp-kit";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
+import { EncryptedObject, SealClient, SessionKey } from "@mysten/seal";
 interface AddJobRequestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectName: string;
+  projectId: string;
   onJobAdded: (job: JobRequest) => void;
 }
 
@@ -49,7 +55,9 @@ export interface JobRequest {
   budget: number;
   deadline: string;
   description: string;
+  location: string;
   requiredSkills: string[];
+  organizationContributions: string[];
   applicants: number;
   status: "Open" | "Hiring" | "In Progress" | "Completed" | "Closed";
   postedDate: string;
@@ -63,91 +71,250 @@ const categories = [
   { value: "Marketing", label: "Marketing", icon: Megaphone, color: "#FF6B00" },
 ];
 
-const suggestedSkills: { [key: string]: string[] } = {
-  Development: ["Solidity", "React", "Node.js", "TypeScript", "Web3.js", "Smart Contracts", "Testing"],
-  Design: ["Figma", "UI/UX", "Branding", "Motion Design", "Illustration", "Prototyping"],
-  Content: ["Technical Writing", "Copywriting", "SEO", "Content Strategy", "Editing"],
-  Marketing: ["Social Media", "Community Management", "Growth Hacking", "Analytics", "PR"],
-};
-
 const budgetPresets = [500, 1000, 2500, 5000, 10000, 25000];
 
 export function AddJobRequestDialog({
   open,
   onOpenChange,
   projectName,
+  projectId,
   onJobAdded,
 }: AddJobRequestDialogProps) {
+  const currentAccount = useCurrentAccount();
+  const { mutate: signPersonalMessage } = useSignPersonalMessage();
+  const client = new SuiJsonRpcClient({
+    url: getFullnodeUrl('testnet'),
+    network: 'testnet',
+  });
+  if (!currentAccount) {
+    toast.error("Please connect your wallet first");
+    return;
+  }
+  const packageId = '0xc58a26ab2751fbae42888dda3ed47637703018ec8969de8fae2b4aba6ba1bfd3';
+  // Replace this with a list of custom key server object IDs.
+  // const serverObjectIds = getAllowlistedKeyServers('testnet');
+  const whitelistedId = "0x18959ea37ee943aae83b0a40662d3b94cb4b78070be8c9275178da0966094553";
+  const serverObjectIds = [
+      "0x164ac3d2b3b8694b8181c13f671950004765c23f270321a45fdd04d40cccf0f2", 
+      "0x5466b7df5c15b508678d51496ada8afab0d6f70a01c10613123382b1b8131007"
+  ];
+  const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
+  const sealClient = new SealClient({
+      suiClient,
+      serverConfigs: serverObjectIds.map((id) => ({
+          objectId: id,
+          weight: 1,
+      })),
+      verifyKeyServers: false,
+  });
+  const vendor = import.meta.env.VITE_PACKAGE_ID;
+  const registry = import.meta.env.VITE_REGISTRY_ID;
+  const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [budget, setBudget] = useState("");
   const [deadline, setDeadline] = useState("");
   const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
   const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
+  const [skillAmounts, setSkillAmounts] = useState<{ [skill: string]: number }>({});
   const [newSkill, setNewSkill] = useState("");
+  const [organizationContributions, setOrganizationContributions] = useState<string[]>([]);
+  const [orgAmounts, setOrgAmounts] = useState<{ [org: string]: number }>({});
+  const [newContribution, setNewContribution] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  
   const handleAddSkill = (skill: string) => {
     if (skill && !requiredSkills.includes(skill)) {
       setRequiredSkills([...requiredSkills, skill]);
+      setSkillAmounts({ ...skillAmounts, [skill]: 0 });
       setNewSkill("");
     }
   };
-
+  
   const handleRemoveSkill = (skillToRemove: string) => {
     setRequiredSkills(requiredSkills.filter(skill => skill !== skillToRemove));
+    const newSkillAmounts = { ...skillAmounts };
+    delete newSkillAmounts[skillToRemove];
+    setSkillAmounts(newSkillAmounts);
   };
-
-  const handleSubmit = () => {
+  
+  const handleSkillAmountChange = (skill: string, amount: number) => {
+    setSkillAmounts({ ...skillAmounts, [skill]: amount });
+  };
+  
+  const handleAddContribution = (contribution: string) => {
+    if (contribution && !organizationContributions.includes(contribution)) {
+      setOrganizationContributions([...organizationContributions, contribution]);
+      setOrgAmounts({ ...orgAmounts, [contribution]: 0 });
+      setNewContribution("");
+    }
+  };
+  
+  const handleRemoveContribution = (contributionToRemove: string) => {
+    setOrganizationContributions(organizationContributions.filter(c => c !== contributionToRemove));
+    const newOrgAmounts = { ...orgAmounts };
+    delete newOrgAmounts[contributionToRemove];
+    setOrgAmounts(newOrgAmounts);
+  };
+  
+  const handleOrgAmountChange = (org: string, amount: number) => {
+    setOrgAmounts({ ...orgAmounts, [org]: amount });
+  };
+  
+  const handleSubmit = async () => {
     // Validation
     if (!title.trim()) {
       toast.error("Please enter a job title");
       return;
     }
-
+    
     if (!category) {
       toast.error("Please select a category");
       return;
     }
-
+    
     if (!budget || parseFloat(budget) <= 0) {
       toast.error("Please enter a valid budget");
       return;
     }
-
+    
     if (!deadline) {
       toast.error("Please select a deadline");
       return;
     }
-
+    
     if (!description.trim()) {
       toast.error("Please enter a job description");
       return;
     }
-
+    
+    if (!location.trim()) {
+      toast.error("Please enter a location");
+      return;
+    }
+    
     if (requiredSkills.length === 0) {
       toast.error("Please add at least one required skill");
       return;
     }
-
+    
+    if (organizationContributions.length === 0) {
+      toast.error("Please add at least one organization contribution");
+      return;
+    }
+    
+    
     setIsSubmitting(true);
     toast.loading("Posting job request...");
-
-    // Simulate posting to blockchain
-    setTimeout(() => {
-      const newJob: JobRequest = {
-        id: Date.now(),
-        title: title.trim(),
-        category,
-        budget: parseFloat(budget),
-        deadline,
-        description: description.trim(),
-        requiredSkills,
-        applicants: 0,
-        status: "Open",
-        postedDate: new Date().toISOString(),
-      };
-
+    
+    // Map category string to number
+    const categoryMap: { [key: string]: number } = {
+      "Development": 0,
+      "Design": 1,
+      "Content": 2,
+      "Marketing": 3,
+    };
+    const categoryNum = categoryMap[category] || 0;
+    
+    // Prepare role and org arrays with amounts
+    const roleAmounts = requiredSkills.map(skill => skillAmounts[skill] || 0);
+    const orgAmountsArray = organizationContributions.map(org => orgAmounts[org] || 0);
+    
+    const newJob: JobRequest = {
+      id: Date.now(),
+      title: title.trim(),
+      category,
+      budget: parseFloat(budget),
+      deadline,
+      description: description.trim(),
+      location: location.trim(),
+      requiredSkills,
+      organizationContributions,
+      applicants: 0,
+      status: "Open",
+      postedDate: new Date().toISOString(),
+    };
+    
+    // Log the size of the newJob data
+    const jobDataString = JSON.stringify(newJob);
+    const jobDataBytes = new TextEncoder().encode(jobDataString);
+    console.log('=== New Job Request Data Size ===');
+    console.log('Job Data (stringified):', jobDataString);
+    console.log('String length:', jobDataString.length, 'characters');
+    console.log('Byte size:', jobDataBytes.length, 'bytes');
+    console.log('Size in KB:', (jobDataBytes.length / 1024).toFixed(2), 'KB');
+    console.log('================================');
+    
+    try {
+      // Fetch USDC coins from user's wallet
+      const usdcCoinType = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
+      console.log('Fetching USDC coins from wallet...');
+      
+      const coinsResponse = await client.getCoins({
+        owner: currentAccount.address,
+        coinType: usdcCoinType,
+      });
+      
+      console.log('USDC Coins:', coinsResponse);
+      
+      if (!coinsResponse.data || coinsResponse.data.length === 0) {
+        toast.dismiss();
+        toast.error("No USDC coins found in your wallet. Please get some USDC first.");
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Calculate total USDC balance
+      const totalBalance = coinsResponse.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+      const budgetAmount = BigInt(Math.floor(parseFloat(budget) * 1_000_000)); // Convert to USDC micro-units
+      
+      console.log(`Total USDC Balance: ${totalBalance}, Required: ${budgetAmount}`);
+      
+      if (totalBalance < budgetAmount) {
+        toast.dismiss();
+        toast.error(`Insufficient USDC balance. Required: ${parseFloat(budget)} USDC, Available: ${Number(totalBalance) / 1_000_000} USDC`);
+        setIsSubmitting(false);
+        return;
+      }
+      encryptJobDetails(newJob);
+      const tx = new Transaction();
+      
+      // Merge all USDC coins if there are multiple
+      const primaryCoin = coinsResponse.data[0].coinObjectId;
+      if (coinsResponse.data.length > 1) {
+        const coinObjectsToMerge = coinsResponse.data.slice(1).map(coin => coin.coinObjectId);
+        tx.mergeCoins(
+          tx.object(primaryCoin),
+          coinObjectsToMerge.map(id => tx.object(id))
+        );
+      }
+      
+      // Split the required amount from the primary coin
+      const [coin] = tx.splitCoins(tx.object(primaryCoin), [budgetAmount.toString()]);
+      
+      tx.moveCall({
+        target: `${vendor}::ideation::create_job`,
+        arguments: [
+          tx.object(registry),
+          tx.object(projectId),
+          tx.pure.vector('string', requiredSkills),
+          tx.pure.vector('u64', roleAmounts),
+          tx.pure.vector('string', organizationContributions),
+          tx.pure.vector('u64', orgAmountsArray),
+          tx.pure.address(currentAccount.address),
+          tx.pure.u64(categoryNum),
+          coin,
+        ],
+      });
+      
+      // Execute transaction
+      console.log('Executing transaction...');
+      const result = await signAndExecuteTransaction({ transaction: tx });
+      console.log('Job request created:', result);
+      
       onJobAdded(newJob);
       toast.dismiss();
       toast.success("Job request posted successfully!");
@@ -158,12 +325,89 @@ export function AddJobRequestDialog({
       setBudget("");
       setDeadline("");
       setDescription("");
+      setLocation("");
       setRequiredSkills([]);
+      setSkillAmounts({});
       setNewSkill("");
+      setOrganizationContributions([]);
+      setOrgAmounts({});
+      setNewContribution("");
       setIsSubmitting(false);
       onOpenChange(false);
-    }, 2000);
+    } catch (error) {
+      console.error("Error posting job request:", error);
+      toast.dismiss();
+      toast.error("Failed to post job request. Please try again.");
+      setIsSubmitting(false);
+    }
   };
+  async function encryptJobDetails(jobDetails: JobRequest) {
+    if (!currentAccount) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+    try {
+        const data = new TextEncoder().encode(JSON.stringify(jobDetails));
+        console.log("Encrypting data...");
+        const { encryptedObject: encryptedBytes, key: backupKey } = await sealClient.encrypt({
+            threshold: 1,
+            packageId: packageId,
+            id: whitelistedId,
+            data
+        });
+        console.log("Encrypted bytes:", encryptedBytes);
+        const parsed = EncryptedObject.parse(encryptedBytes);
+        const identityBytes = parsed.id; // vector<u8> used at encrypt time
+        console.log("Identity bytes:", identityBytes);
+        console.log("Creating session key...");
+
+        // const sessionKey = await SessionKey.create({
+        //     address: currentAccount.address,
+        //     packageId: packageId,
+        //     ttlMin: 10, // TTL of 10 minutes
+        //     suiClient: new SuiClient({ url: getFullnodeUrl('testnet') }),
+        // });
+        // console.log("Signing session key...");
+        // const message = sessionKey.getPersonalMessage();
+        // console.log("Message created...");
+        // signPersonalMessage({ message }); // User confirms in wallet
+        // console.log("Signature created...");
+        // sessionKey.setPersonalMessageSignature(signature); // Initialization complete
+        // console.log("Session key created...");
+        // const moduleName = "access_control";
+        // // Create the Transaction for evaluating the seal_approve function.
+        // console.log("Creating transaction...");
+        // const tx = new Transaction();
+        // // const idBytes = hexToBytes(whitelistedId);
+        // const idBytes = hexToBytes(packageId);
+        // // const idBytes = fromHex("0x11");
+        // console.log(idBytes)
+        // // const idBytes = hexToBytes("0x01"); -> If you do not put the white list ID, seal will invalidate you!!
+        // tx.moveCall({
+        //     // target: `${packageId}::${moduleName}::seal_approve_all`,
+        //     target: `${packageId}::${moduleName}::seal_approve`,
+        //     arguments: [
+        //         tx.pure.vector("u8", idBytes)
+        //     ]
+        // });
+        // const txBytes = await tx.build({ client: suiClient, onlyTransactionKind: true });
+        // console.log("Transaction information: ",txBytes);
+        
+        // console.log("Decrypting data...");
+        // const decryptedBytes = await client.decrypt({
+        //     data: encryptedBytes,
+        //     sessionKey,
+        //     txBytes,
+        // });
+        // console.log("len:", decryptedBytes.length);
+        // console.log("str:", new TextDecoder().decode(decryptedBytes));
+        // console.log("Decrypted data:", decryptedBytes);
+    } catch (error) {
+        console.log("Error occured")
+        console.log("Error:", error);
+        console.log(error);
+    }
+  }
 
   const selectedCategoryData = categories.find(c => c.value === category);
   const Icon = selectedCategoryData?.icon || Briefcase;
@@ -185,18 +429,6 @@ export function AddJobRequestDialog({
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
-          {/* Info Card */}
-          <Card className="p-4 bg-[#00E0FF]/10 border-[#00E0FF]/30">
-            <div className="flex items-start gap-3">
-              <Target className="w-5 h-5 text-[#00E0FF] flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-[#00E0FF] mb-1">Find the Right Talent</p>
-                <p className="text-[#A0A2A8] text-sm">
-                  Post detailed job requests to attract qualified applicants from the Foundry³ community.
-                </p>
-              </div>
-            </div>
-          </Card>
 
           {/* Job Title */}
           <div>
@@ -259,21 +491,6 @@ export function AddJobRequestDialog({
                   className="pl-10 bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] placeholder:text-[#A0A2A8]"
                 />
               </div>
-              {/* Budget Presets */}
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {budgetPresets.map((preset) => (
-                  <Button
-                    key={preset}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setBudget(preset.toString())}
-                    className="text-xs border-[#E8E9EB]/20 text-[#A0A2A8] hover:bg-[#0D0E10] hover:text-[#00E0FF] hover:border-[#00E0FF]/30"
-                  >
-                    ${preset.toLocaleString()}
-                  </Button>
-                ))}
-              </div>
             </div>
 
             {/* Deadline */}
@@ -313,13 +530,30 @@ export function AddJobRequestDialog({
             </div>
           </div>
 
+          {/* Location */}
+          <div>
+            <Label htmlFor="location" className="text-[#E8E9EB] mb-2 block">
+              Location *
+            </Label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#A0A2A8]" />
+              <Input
+                id="location"
+                placeholder="e.g., Remote, New York, Hybrid - San Francisco"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="pl-10 bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] placeholder:text-[#A0A2A8]"
+              />
+            </div>
+          </div>
+
           {/* Required Skills */}
           <div>
             <Label className="text-[#E8E9EB] mb-2 block">
-              Required Skills *
+              Required role contributions *
             </Label>
             
-            {/* Suggested Skills for Category */}
+            {/* Suggested Skills for Category
             {category && suggestedSkills[category] && (
               <div className="mb-3">
                 <p className="text-sm text-[#A0A2A8] mb-2">Suggested for {category}:</p>
@@ -344,7 +578,7 @@ export function AddJobRequestDialog({
                   ))}
                 </div>
               </div>
-            )}
+            )} */}
 
             {/* Custom Skill Input */}
             <div className="flex gap-2">
@@ -378,26 +612,102 @@ export function AddJobRequestDialog({
                     {requiredSkills.length}
                   </Badge>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+                <div className="space-y-2">
                   {requiredSkills.map((skill) => (
-                    <Badge
-                      key={skill}
-                      className="bg-[#C04BFF]/20 text-[#C04BFF] border-[#C04BFF]/30 pr-1"
-                    >
-                      {skill}
-                      <button
-                        onClick={() => handleRemoveSkill(skill)}
-                        className="ml-2 hover:bg-[#C04BFF]/30 rounded-full p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
+                    <div key={skill} className="flex items-center gap-2">
+                      <Badge className="bg-[#C04BFF]/20 text-[#C04BFF] border-[#C04BFF]/30 pr-1 flex-shrink-0">
+                        {skill}
+                        <button
+                          onClick={() => handleRemoveSkill(skill)}
+                          className="ml-2 hover:bg-[#C04BFF]/30 rounded-full p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                      <div className="flex items-center gap-2 flex-1">
+                        <Label className="text-xs text-[#A0A2A8] whitespace-nowrap">Amount:</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={skillAmounts[skill] || ''}
+                          onChange={(e) => handleSkillAmountChange(skill, parseInt(e.target.value) || 0)}
+                          className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] placeholder:text-[#A0A2A8] h-8 text-sm"
+                        />
+                      </div>
+                    </div>
                   ))}
                 </div>
               </Card>
             )}
           </div>
+          <div>
+            <Label className="text-[#E8E9EB] mb-2 block">
+              Required Organization Contribution *
+            </Label>
+            
+            {/* Custom Contribution Input */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Add an organization contribution..."
+                value={newContribution}
+                onChange={(e) => setNewContribution(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddContribution(newContribution);
+                  }
+                }}
+                className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] placeholder:text-[#A0A2A8]"
+              />
+              <Button
+                type="button"
+                onClick={() => handleAddContribution(newContribution)}
+                className="bg-[#00E0FF] text-[#0D0E10] hover:bg-[#00E0FF]/90"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
 
+            {/* Selected Contributions */}
+            {organizationContributions.length > 0 && (
+              <Card className="p-4 bg-[#0D0E10]/50 border-[#E8E9EB]/10 mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-[#E8E9EB]">Selected Contributions</span>
+                  <Badge className="bg-[#00FFA3]/20 text-[#00FFA3] border-[#00FFA3]/30">
+                    {organizationContributions.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {organizationContributions.map((contribution) => (
+                    <div key={contribution} className="flex items-center gap-2">
+                      <Badge className="bg-[#FF6B00]/20 text-[#FF6B00] border-[#FF6B00]/30 pr-1 flex-shrink-0">
+                        {contribution}
+                        <button
+                          onClick={() => handleRemoveContribution(contribution)}
+                          className="ml-2 hover:bg-[#FF6B00]/30 rounded-full p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                      <div className="flex items-center gap-2 flex-1">
+                        <Label className="text-xs text-[#A0A2A8] whitespace-nowrap">Amount:</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={orgAmounts[contribution] || ''}
+                          onChange={(e) => handleOrgAmountChange(contribution, parseInt(e.target.value) || 0)}
+                          className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] placeholder:text-[#A0A2A8] h-8 text-sm"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+        
           {/* Summary Preview */}
           {title && category && budget && deadline && (
             <Card className="p-4 bg-[#00FFA3]/10 border-[#00FFA3]/30">
@@ -415,6 +725,7 @@ export function AddJobRequestDialog({
                     </div>
                     <div className="text-[#A0A2A8]">
                       Budget: ${parseFloat(budget).toLocaleString()} • Deadline: {new Date(deadline).toLocaleDateString()}
+                      {location && ` • ${location}`}
                     </div>
                   </div>
                 </div>
@@ -427,14 +738,14 @@ export function AddJobRequestDialog({
             <Button
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="flex-1 border-[#E8E9EB]/20 text-[#E8E9EB] hover:bg-[#0D0E10]"
+              className="flex-1 border-[#FF6B00]/30 text-[#FF6B00] hover:bg-[#FF6B00]/10 hover:border-[#FF6B00]/50"
               disabled={isSubmitting}
             >
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !title || !category || !budget || !deadline || !description || requiredSkills.length === 0}
+              disabled={isSubmitting || !title || !category || !budget || !deadline || !description || !location || requiredSkills.length === 0 || organizationContributions.length === 0}
               className="flex-1 bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] disabled:opacity-50"
             >
               <Briefcase className="w-4 h-4 mr-2" />
@@ -446,3 +757,4 @@ export function AddJobRequestDialog({
     </Dialog>
   );
 }
+

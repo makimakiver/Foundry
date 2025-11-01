@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { getFullnodeUrl } from "@mysten/sui/client";
@@ -63,6 +63,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
   const subnamePkg    = import.meta.env.VITE_SUINS_SUBDOMAIN_PACKAGE_ID;
   const subname_proxyPkg = import.meta.env.VITE_SUINS_SUBDOMAIN_PROXY_PACKAGE_ID;
   const suinsShared   = import.meta.env.VITE_SUINS_SHARED_OBJECT_ID;
+  const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
   const clockId       = '0x6';
   const vendor = import.meta.env.VITE_PACKAGE_ID;
   const registry = import.meta.env.VITE_REGISTRY_ID;
@@ -74,6 +75,8 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
   const [historyVisibility, setHistoryVisibility] = useState<"public" | "private">("private");
   const [uploadedImageFile, setUploadedImageFile] = useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isFetchingUserData, setIsFetchingUserData] = useState(false);
+  const [userWalletBalance, setUserWalletBalance] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const totalSteps = 4;
 
@@ -340,6 +343,14 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
             tx.pure.bool(false),
           ],
         });
+        tx.moveCall({
+          target: `${vendor}::ideation::add_job_identity_info`,
+          arguments: [
+            tx.object(account_ns_reg),       // shared object
+            tx.object(extrasubnameNft),      // must be owned by sender or have the required cap
+            tx.pure.address(currentAccount.address),
+          ],
+        });
         tx.transferObjects([extrasubnameNft], tx.pure.address(currentAccount.address));
         console.log('[2] transfer to receiver…');
         console.log(data.teamMembers)
@@ -359,6 +370,14 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                 tx.pure.bool(false),
               ],
             });
+            // tx.moveCall({
+            //   target: `${vendor}::ideation::add_job_identity_info`,
+            //   arguments: [
+            //     tx.object(account_ns_reg),       // shared object
+            //     memberSubnameNft,      // must be owned by sender or have the required cap
+            //     tx.pure.address(member.name),
+            //   ],
+            // });
             tx.transferObjects([memberSubnameNft], tx.pure.address(member.name));
           }
         }
@@ -795,34 +814,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                         className="hidden"
                       />
                       
-                      {/* Upload to IPFS Button */}
-                      {uploadedImageFile && !watchedData.image?.startsWith('http') && (
-                        <div className="mt-3 flex items-center gap-3">
-                          <Button
-                            type="button"
-                            onClick={handleUploadToPinata}
-                            disabled={isUploadingImage}
-                            className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                          >
-                            {isUploadingImage ? (
-                              <>
-                                <div className="animate-spin mr-2 h-4 w-4 border-2 border-[#0D0E10] border-t-transparent rounded-full" />
-                                Uploading to IPFS...
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="w-4 h-4 mr-2" />
-                                Upload to IPFS
-                              </>
-                            )}
-                          </Button>
-                          {uploadedImageFile && (
-                            <span className="text-xs text-muted-foreground">
-                              {uploadedImageFile.name} ({(uploadedImageFile.size / 1024 / 1024).toFixed(2)}MB)
-                            </span>
-                          )}
-                        </div>
-                      )}
+               
                       
                       {/* Success message when uploaded */}
                       {watchedData.image?.startsWith('http') && (

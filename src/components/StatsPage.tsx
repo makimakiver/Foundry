@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "./ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Button } from "./ui/button";
@@ -13,6 +13,10 @@ import { CompleteJobDialog } from "./CompleteJobDialog";
 import { HireApplicantsDialog } from "./HireApplicantsDialog";
 import { useWallet } from "../contexts/WalletContext";
 import { motion } from "motion/react";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { getFullnodeUrl } from "@mysten/sui/client";
+import { blobIdFromInt, walrus } from "@mysten/walrus";
+import { walrusImageUrl } from "../lib/walrus_utils";
 import { 
   TrendingUp, 
   TrendingDown,
@@ -65,9 +69,51 @@ import {
   ResponsiveContainer 
 } from "recharts";
 import { toast } from "sonner@2.0.3";
+import { useCurrentAccount } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
 
-// Mock data for user's backed projects
-const userProjects = [
+// Project class matching the blockchain data structure
+class Project {
+  id: number;
+  blockchainId: string; // The actual blockchain object ID
+  name: string;
+  category: string;
+  status: "Live" | "Funded";
+  image: string;
+  investment: {
+    amount: number;
+    date: string;
+    tokens: number;
+    currentValue: number;
+    roi: number;
+    ownership: number;
+  };
+  projectStats: {
+    totalRaised: number;
+    fundingGoal: number;
+    backers: number;
+    fundingProgress: number;
+    valuation: number;
+  };
+  performance: { month: string; value: number }[];
+  detailsBlobId?: string;
+
+  constructor(data: any) {
+    this.id = data.id;
+    this.blockchainId = data.blockchainId;
+    this.name = data.name;
+    this.category = data.category;
+    this.status = data.status || "Live";
+    this.image = data.image;
+    this.investment = data.investment;
+    this.projectStats = data.projectStats;
+    this.performance = data.performance;
+    this.detailsBlobId = data.detailsBlobId;
+  }
+}
+
+// Mock data for user's backed projects (fallback)
+const mockUserProjects = [
   {
     id: 1,
     name: "defi-analytics.sui",
@@ -185,7 +231,30 @@ const userProjects = [
 ];
 
 export function StatsPage() {
-  const { isConnected, walletAddress } = useWallet();
+  const currentAccount = useCurrentAccount();
+  const walletAddress = currentAccount?.address;
+  const isConnected = !!currentAccount;
+  
+  // Walrus client setup
+  const projectId = import.meta.env.VITE_REGISTRY_ID;
+  const vendor = import.meta.env.VITE_PACKAGE_ID;
+  const client = new SuiJsonRpcClient({
+    url: getFullnodeUrl('testnet'),
+    network: 'testnet',
+  }).$extend(
+    walrus({
+      uploadRelay: {
+        host: 'https://upload-relay.testnet.walrus.space',
+        sendTip: {
+          max: 1_000,
+        },
+      },     
+      wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
+    }),
+  );
+  
+  const [userProjects, setUserProjects] = useState<Project[]>([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [expandedProject, setExpandedProject] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<"roi" | "amount" | "date">("roi");
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false);
@@ -200,26 +269,7 @@ export function StatsPage() {
   const [showHireDialog, setShowHireDialog] = useState(false);
   const [selectedJobForHiring, setSelectedJobForHiring] = useState<JobRequest | null>(null);
   const [selectedProjectForHiring, setSelectedProjectForHiring] = useState<number | null>(null);
-  const [projectMembers, setProjectMembers] = useState<{ [projectId: number]: TeamMember[] }>({
-    1: [
-      {
-        address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-        email: "sarah@defianalytics.com",
-        role: "admin",
-        permissions: ["Manage team", "Edit project", "Manage funds", "View analytics", "Post jobs"],
-        addedDate: "2024-03-01T00:00:00Z",
-      },
-    ],
-    2: [
-      {
-        address: "0x8Ba1f109551bD432803012645Ac136ddd64DBA72",
-        email: "alex@aicode.ai",
-        role: "admin",
-        permissions: ["Manage team", "Edit project", "Manage funds", "View analytics", "Post jobs"],
-        addedDate: "2024-02-15T00:00:00Z",
-      },
-    ],
-  });
+  const [projectMembers, setProjectMembers] = useState<{ [projectId: number]: TeamMember[] }>({});
   
   const [projectJobs, setProjectJobs] = useState<{ [projectId: number]: JobRequest[] }>({
     1: [
@@ -231,6 +281,7 @@ export function StatsPage() {
         deadline: "2024-07-15",
         description: "We need a comprehensive security audit of our smart contracts before mainnet launch.",
         requiredSkills: ["Solidity", "Security Auditing", "Testing"],
+        organizationContributions: ["Code Review Access", "Technical Documentation", "Testing Environment"],
         applicants: 12,
         status: "Open",
         postedDate: "2024-06-01T00:00:00Z",
@@ -243,6 +294,7 @@ export function StatsPage() {
         deadline: "2024-07-10",
         description: "Create a complete brand identity including logo, color palette, and design system.",
         requiredSkills: ["Branding", "UI/UX", "Figma"],
+        organizationContributions: ["Brand Guidelines", "Design Assets", "Team Feedback"],
         applicants: 8,
         status: "In Progress",
         postedDate: "2024-05-20T00:00:00Z",
@@ -256,6 +308,7 @@ export function StatsPage() {
         deadline: "2024-08-01",
         description: "Plan and execute a comprehensive social media campaign for product launch.",
         requiredSkills: ["Social Media", "Content Strategy", "Analytics"],
+        organizationContributions: ["Marketing Budget", "Content Calendar", "Analytics Access"],
         applicants: 10,
         status: "Hiring",
         postedDate: "2024-06-10T00:00:00Z",
@@ -271,6 +324,7 @@ export function StatsPage() {
         deadline: "2024-07-20",
         description: "Write comprehensive technical documentation for our API and SDK.",
         requiredSkills: ["Technical Writing", "API Documentation"],
+        organizationContributions: ["API Access", "Code Examples", "Engineering Support"],
         applicants: 15,
         status: "Open",
         postedDate: "2024-05-25T00:00:00Z",
@@ -410,10 +464,218 @@ export function StatsPage() {
 
   const [expandedJobApplications, setExpandedJobApplications] = useState<{ [jobId: number]: boolean }>({});
 
+  // Fetch metadata from Walrus
+  const fetchMetadataFromWalrus = async (blobId: string, projectName: string) => {
+    try {
+      const metadataFileName = `${projectName}-metadata.json`;
+      const AGGREGATOR = 'https://aggregator.walrus-testnet.walrus.space';
+      const metadataUrl = `${AGGREGATOR}/v1/blobs/by-quilt-id/${blobId}/${metadataFileName}`;
+      
+      console.log('Fetching metadata from:', metadataUrl);
+      const response = await fetch(metadataUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch metadata: HTTP ${response.status}`);
+      }
+      
+      const metadata = await response.json();
+      console.log('Fetched metadata:', metadata);
+      return metadata;
+    } catch (error) {
+      console.error('Error fetching metadata:', error);
+      return null;
+    }
+  };
+
+  // Fetch projects from blockchain/Walrus
+  const fetchProjects = async () => {
+    try {
+      if (!currentAccount) {
+        toast.error("Please connect your wallet to fetch projects");
+        return;
+      }
+      setIsLoadingProjects(true);
+      console.log('Fetching projects from blockchain...');
+
+      const project_struct = await client.getObject({
+        id: projectId,
+        options: { showContent: true },
+      });
+      const projectContent: any = project_struct.data?.content;
+      console.log('Project registry content:', projectContent);
+      const parentId = projectContent?.fields?.accessible_project?.fields?.id?.id;
+      console.log('Parent ID:', parentId);
+      const name = { type: 'address', value: currentAccount.address };
+      const obj = await client.getDynamicFieldObject({ parentId, name });
+      console.log('Dynamic field object:', obj);
+      const content: any = (obj as any).data?.content;
+      const projectAddrs = content?.fields?.value;
+      console.log('Project addresses:', projectAddrs);
+      
+      const projectObjects: any[] = [];
+      if (Array.isArray(projectAddrs)) {
+        for (const projectAddr of projectAddrs) {
+          const projectObj = await client.getObject({
+            id: projectAddr,
+            options: { showContent: true },
+          });
+          console.log('Fetched project object:', projectObj);
+          projectObjects.push(projectObj);
+        }
+      }
+      
+      console.log('All project objects:', projectObjects);
+      
+      const parsed: Project[] = [];
+      const newProjectMembers: { [projectId: number]: TeamMember[] } = {};
+      
+      if (Array.isArray(projectObjects) && projectObjects.length > 0) {
+        for (let i = 0; i < projectObjects.length; i++) {
+          const projectObj = projectObjects[i];
+          
+          // Access the project data from the object
+          const f = (projectObj as any)?.data?.content?.fields;
+          console.log('Project fields:', f);
+          
+          if (!f) {
+            console.warn('No fields found for project', i);
+            continue;
+          }
+          
+          // Get project name and strip .sui extension for image file name
+          const project_name = f?.title?.toLowerCase().endsWith('.sui') 
+            ? f?.title.slice(0, -4) 
+            : f?.title;
+          
+          const blob_id = blobIdFromInt(f?.details.fields.blob_id).toString();
+          
+          // Fetch metadata from Walrus
+          const metadata = await fetchMetadataFromWalrus(blob_id, project_name);
+          
+          // Extract team members from metadata
+          if (metadata && metadata.teamMembers && Array.isArray(metadata.teamMembers)) {
+            const teamMembers = metadata.teamMembers
+              .filter((member: any) => member.name && member.role)
+              .map((member: any) => ({
+                address: member.name, // In the metadata, 'name' field contains the address
+                email: `${member.role}@${project_name}.sui`, // Generate email from role and project
+                role: member.role === 'co-founder' ? 'admin' : member.role,
+                permissions: member.role === 'co-founder' 
+                  ? ["Manage team", "Edit project", "Manage funds", "View analytics", "Post jobs"]
+                  : ["View analytics"],
+                addedDate: new Date().toISOString(),
+              }));
+            
+            if (teamMembers.length > 0) {
+              newProjectMembers[i + 1] = teamMembers;
+              console.log(`Found ${teamMembers.length} team members for project ${i + 1}:`, teamMembers);
+            }
+          }
+          
+          // Fetch image from Walrus
+          let imageUrl = '';
+          let imageDirectUrl = '';
+          try {
+            const imageFileName = `${project_name}-image`;
+            const imageUrls = await walrusImageUrl(blob_id, imageFileName);
+            imageUrl = imageUrls.blobUrl;
+            imageDirectUrl = imageUrls.directUrl;
+          } catch (error) {
+            console.error('Failed to fetch image for project:', project_name, error);
+          }
+          
+          // Create project with mock investment data (in production, fetch actual user investment)
+          const fundingGoal = Number(f?.fundingGoal ?? f?.funding_goal ?? 0);
+          const mockInvestment = Math.floor(Math.random() * 10000) + 1000; // Random investment between 1k-11k
+          const mockROI = Math.floor(Math.random() * 100) - 20; // Random ROI between -20% and 80%
+          const currentValue = mockInvestment * (1 + mockROI / 100);
+          
+          // Get the blockchain object ID
+          const blockchainId = (projectObj as any)?.data?.objectId || projectAddrs[i];
+          
+          const project = new Project({
+            id: i + 1,
+            blockchainId: blockchainId,
+            name: String(f?.title ?? ''),
+            category: String(f?.category ?? 'DeFi'),
+            status: fundingGoal > 0 ? 'Live' : 'Funded',
+            image: imageDirectUrl || imageUrl || 'https://via.placeholder.com/400',
+            investment: {
+              amount: mockInvestment,
+              date: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(), // Random date within last 90 days
+              tokens: mockInvestment,
+              currentValue: Math.round(currentValue),
+              roi: mockROI,
+              ownership: Number(((mockInvestment / fundingGoal) * 100).toFixed(2)),
+            },
+            projectStats: {
+              totalRaised: Math.floor(fundingGoal * (Math.random() * 0.5 + 0.3)), // 30-80% of goal
+              fundingGoal: fundingGoal,
+              backers: Math.floor(Math.random() * 500) + 50,
+              fundingProgress: Math.random() * 100,
+              valuation: fundingGoal * (Math.random() * 3 + 2), // 2-5x of funding goal
+            },
+            performance: [
+              { month: "Jan", value: mockInvestment },
+              { month: "Feb", value: Math.round(mockInvestment * 1.05) },
+              { month: "Mar", value: Math.round(mockInvestment * 1.1) },
+              { month: "Apr", value: Math.round(mockInvestment * 1.15) },
+              { month: "May", value: Math.round(mockInvestment * 1.2) },
+              { month: "Jun", value: Math.round(currentValue) },
+            ],
+            detailsBlobId: String(f?.details.fields.blob_id ?? ''),
+          });
+          
+          parsed.push(project);
+        }
+      }
+      
+      console.log('Fetched projects:', parsed);
+      console.log('Fetched team members:', newProjectMembers);
+      
+      if (parsed.length === 0) {
+        console.log('No projects found for this wallet');
+        toast.info('No projects found. Launch a project to see it here!');
+      }
+      
+      setUserProjects(parsed);
+      
+      // Update project members with fetched data
+      setProjectMembers(prev => ({
+        ...prev,
+        ...newProjectMembers,
+      }));
+      
+      setIsLoadingProjects(false);
+      return parsed;
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+      // Use mock data as fallback
+      const fallbackProjects = mockUserProjects.map((p, i) => new Project({
+        ...p,
+        id: i + 1,
+        blockchainId: `mock-project-${i + 1}`, // Mock blockchain ID for fallback
+      }));
+      setUserProjects(fallbackProjects);
+      setIsLoadingProjects(false);
+      return fallbackProjects;
+    }
+  };
+
+  // Fetch projects when wallet is connected
+  useEffect(() => {
+    if (currentAccount) {
+      fetchProjects();
+    } else {
+      setIsLoadingProjects(false);
+      setUserProjects([]);
+    }
+  }, [currentAccount]);
+
   // Calculate portfolio totals
   const totalInvested = userProjects.reduce((sum, p) => sum + p.investment.amount, 0);
   const totalCurrentValue = userProjects.reduce((sum, p) => sum + p.investment.currentValue, 0);
-  const totalROI = ((totalCurrentValue - totalInvested) / totalInvested) * 100;
+  const totalROI = totalInvested > 0 ? ((totalCurrentValue - totalInvested) / totalInvested) * 100 : 0;
   const totalProjects = userProjects.length;
 
   // Sort projects
@@ -508,7 +770,7 @@ export function StatsPage() {
       m.address.toLowerCase() === walletAddress.toLowerCase()
     );
     
-    return userMember ? userMember.permissions.includes("Post jobs") : false;
+    return userMember ? userMember.permissions.includes("Post jobs") : true;
   };
 
   const toggleJobApplications = (jobId: number) => {
@@ -719,73 +981,14 @@ export function StatsPage() {
           <p className="text-xl text-muted-foreground">
             Track your investments and project performance
           </p>
+          {isLoadingProjects && (
+            <div className="flex items-center gap-2 text-[#00E0FF] mt-4">
+              <div className="animate-spin h-4 w-4 border-2 border-[#00E0FF] border-t-transparent rounded-full" />
+              <span className="text-sm">Loading projects from Walrus...</span>
+            </div>
+          )}
         </motion.div>
 
-        {/* Wallet Connection Banner */}
-        {!isConnected && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="mb-8"
-          >
-            <Card className="p-6 bg-gradient-to-r from-[#FF6B00]/20 to-[#C04BFF]/20 border-border backdrop-blur-sm">
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-[#FF6B00]/20 rounded-lg">
-                  <Wallet className="w-6 h-6 text-[#FF6B00]" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg text-foreground mb-2">
-                    Connect Your Wallet to Post Jobs
-                  </h3>
-                  <p className="text-muted-foreground mb-4">
-                    You need to connect your wallet to post job requests and manage your projects. 
-                    Connect now to unlock full functionality including team management and job posting.
-                  </p>
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={() => toast.info("Please use the wallet button in the top navigation to connect")}
-                      className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                    >
-                      <Wallet className="w-4 h-4 mr-2" />
-                      Connect Wallet
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="border-border text-foreground hover:bg-card"
-                    >
-                      Learn More
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Connected Wallet Info */}
-        {isConnected && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="mb-8"
-          >
-            <Card className="p-4 bg-[#00FFA3]/10 border-border backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                  <div className="h-2 w-2 rounded-full bg-[#00FFA3] animate-pulse" />
-                  <div className="flex-1">
-                  <p className="text-[#00FFA3]">
-                    Wallet Connected: {walletAddress.substring(0, 6)}...{walletAddress.substring(walletAddress.length - 4)}
-                  </p>
-                  </div>
-                  <Badge className="bg-[#00FFA3]/20 text-[#00FFA3] border-[#00FFA3]/30">
-                    Active
-                  </Badge>
-                </div>
-            </Card>
-          </motion.div>
-        )}
 
         {/* Portfolio Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
@@ -1904,6 +2107,11 @@ export function StatsPage() {
         projectName={
           selectedProjectForJob !== null
             ? userProjects.find(p => p.id === selectedProjectForJob)?.name || ""
+            : ""
+        }
+        projectId={
+          selectedProjectForJob !== null
+            ? userProjects.find(p => p.id === selectedProjectForJob)?.blockchainId || ""
             : ""
         }
         onJobAdded={handleJobAdded}

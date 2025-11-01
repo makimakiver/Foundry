@@ -77,13 +77,6 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
         host: 'https://upload-relay.testnet.walrus.space',
         sendTip: { max: 1_000 },
       },
-      storageNodeClientOptions: {
-        fetch: (url, options) => {
-          console.log('fetching', url);
-          return fetch(url, options);
-        },
-        timeout: 60_000,
-      },
       wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
     })
   ), []);

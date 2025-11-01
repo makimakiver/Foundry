@@ -6,7 +6,7 @@ import { StatsPage } from "./components/StatsPage";
 import { ProjectDetailsPage } from "./components/ProjectDetailsPage";
 import { Footer } from "./components/Footer";
 import { Toaster } from "./components/ui/sonner";
-import { WalletProvider, useWallet } from "./contexts/WalletContext";
+// Removed custom WalletProvider in favor of @mysten/dapp-kit
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { toast } from "sonner@2.0.3";
 import { useCurrentAccount } from "@mysten/dapp-kit";
@@ -29,7 +29,6 @@ interface Project {
 }
 
 function AppContent() {
-  const { isConnected, walletAddress, connect, disconnect } = useWallet();
   const [currentPage, setCurrentPage] = useState<Page>("projects");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const currentAccount = useCurrentAccount();
@@ -56,13 +55,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
-      <Navigation 
-        isConnected={isConnected}
-        walletAddress={walletAddress}
-        onConnect={connect}
-        onDisconnect={disconnect}
-        onNavigate={setCurrentPage}
-      />
+      <Navigation onNavigate={setCurrentPage} />
       
       <main>
         {currentPage === "projects" && (
@@ -99,9 +92,7 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <WalletProvider>
-        <AppContent />
-      </WalletProvider>
+      <AppContent />
     </ThemeProvider>
   );
 }

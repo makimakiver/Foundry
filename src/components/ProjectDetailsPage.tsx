@@ -8,8 +8,8 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { BackProjectDialog } from "./BackProjectDialog";
 import { AddJobRequestDialog, type JobRequest } from "./AddJobRequestDialog";
 import { JobApplicationDialog } from "./JobApplicationDialog";
-import { useWallet } from "../contexts/WalletContext";
-import { motion } from "motion/react";
+// Removed custom wallet context in favor of dapp-kit hooks
+import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner@2.0.3";
 import {
   ArrowLeft,
@@ -38,11 +38,14 @@ import {
   Lock,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "./ui/avatar";
-import { useCurrentAccount } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSignAndExecuteTransaction, useSignPersonalMessage, useSuiClient } from "@mysten/dapp-kit";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
-import { getFullnodeUrl } from "@mysten/sui/client";
+import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
 import { blobIdFromInt, walrus } from "@mysten/walrus";
 import { walrusImageUrl } from "../lib/walrus_utils";
+import { Transaction } from "@mysten/sui/transactions";
+import { fromHex } from "@mysten/bcs";
+import { SealClient, SessionKey } from "@mysten/seal";
 // Note: We use parent-provided navigation instead of react-router.
 
 interface ProjectDetailsPageProps {
@@ -67,7 +70,20 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
   console.log('Project ID:', project.id);
   console.log('Project Name:', project.name);
   console.log('Project blob_id:', project.detailsBlobId);
+  const MYSTEN_1 = "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75";
+  const MYSTEN_2 = "0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8";
+  const RUBY = "0x6068c0acb197dddbacd4746a9de7f025b2ed5a5b6c1b1ab44dade4426d141da2";
+  const NODE_INFRA = "0x5466b7df5c15b508678d51496ada8afab0d6f70a01c10613123382b1b8131007";
+  const STUDIO_MIRAI = "0x164ac3d2b3b8694b8181c13f671950004765c23f270321a45fdd04d40cccf0f2";
+  const OVER_CLOCK = "0x9c949e53c36ab7a9c484ed9e8b43267a77d4b8d70e79aa6b39042e3d4c434105";
+  const H2O_NODE = "0x39cef09b24b667bc6ed54f7159d82352fe2d5dd97ca9a5beaa1d21aa774f25a2";
+  const serverObjectIds = [
+    "0x164ac3d2b3b8694b8181c13f671950004765c23f270321a45fdd04d40cccf0f2", 
+    "0x5466b7df5c15b508678d51496ada8afab0d6f70a01c10613123382b1b8131007"
+  ];
   const currentAccount = useCurrentAccount();
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const walrusClient = useMemo(() => new SuiJsonRpcClient({
     url: getFullnodeUrl('testnet'),
     network: 'testnet',
@@ -80,6 +96,15 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
       wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
     })
   ), []);
+  const suiClient = useSuiClient();
+  const sealClient = new SealClient({
+    suiClient,
+    serverConfigs: serverObjectIds.map((id) => ({
+        objectId: id,
+        weight: 1,
+    })),
+    verifyKeyServers: false,
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showAddJobDialog, setShowAddJobDialog] = useState(false);
   const [showJobApplicationDialog, setShowJobApplicationDialog] = useState(false);
@@ -87,7 +112,10 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
   const [projectJobs, setProjectJobs] = useState<JobRequest[]>([]);
   const [details, setDetails] = useState<any | null>(project.details ?? null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-
+  const [loadingJobs, setLoadingJobs] = useState(false);
+  const [encryptedJobs, setEncryptedJobs] = useState<any[]>([]);
+  const [decryptingJobId, setDecryptingJobId] = useState<string | null>(null);
+  const client = useSuiClient();
   useEffect(() => {
     let mounted = true;
     async function loadDetails() {
@@ -152,6 +180,53 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
     loadDetails();
     return () => { mounted = false };
   }, [project.details, project.detailsBlobId, project.name, project.id, walrusClient]);
+  
+  // Fetch encrypted job requests from blockchain
+  useEffect(() => {
+    let mounted = true;
+    async function fetchEncryptedJobs() {
+      if (!project.id) {
+        return;
+      }
+      
+      try {
+        setLoadingJobs(true);
+        console.log('Fetching encrypted job requests for project:', project.id);
+        
+        const registry = import.meta.env.VITE_REGISTRY_ID;
+        const project_struct = await client.getObject({
+          id: registry,
+          options: { showContent: true },
+        });
+        const projectContent: any = project_struct.data?.content;
+        const parentId = projectContent?.fields?.project_jobs?.fields?.id?.id;
+        const name = { type: '0x2::object::ID', value: project.id };
+        const jobVault = await client.getDynamicFieldObject({ parentId, name });
+        const jobVaultContent: any = jobVault.data?.content;
+        const jobVaultId = jobVaultContent?.fields?.id?.id;
+        const jobVaultObj = await client.getObject({
+          id: jobVaultId,
+          options: { showContent: true },
+        });
+        const jobVaultObjContent: any = jobVaultObj.data?.content;
+        const jobs = jobVaultObjContent?.fields?.value?.fields?.jobs || [];
+        
+        console.log('Fetched encrypted jobs:', jobs.length);
+        
+        if (mounted) {
+          setEncryptedJobs(jobs);
+        }
+      } catch (error) {
+        console.error('Error fetching encrypted job requests:', error);
+      } finally {
+        if (mounted) setLoadingJobs(false);
+      }
+    }
+    
+    fetchEncryptedJobs();
+    return () => { mounted = false };
+  }, [project.id, client]);
+  
   const fundingPercentage = (project.currentFunding / project.fundingGoal) * 100;
   const mergedDescription = details?.readmeContent || project.description || details?.description || "";
 
@@ -169,7 +244,7 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
       maximumFractionDigits: 0,
     }).format(amount);
   };
-  const account = useCurrentAccount();
+
   // Mock data for detailed information
   const teamMembers = [
     { name: "Sarah Chen", role: "Founder & CEO", avatar: "SC" },
@@ -194,64 +269,9 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
     { name: "River Phoenix", amount: 3500, time: "1 day ago" },
   ];
 
-  const projectJobRequests = [
-    {
-      id: 1,
-      title: "Smart Contract Audit",
-      category: "Development",
-      description: "We need an experienced smart contract auditor to review our DeFi protocol contracts. The audit should cover security vulnerabilities, gas optimization, and best practices. Deliverables include a comprehensive audit report with findings and recommendations.",
-      skills: ["Solidity", "Smart Contract Security", "Ethereum", "DeFi", "Gas Optimization"],
-      budget: 5000,
-      deadline: "2024-07-15",
-      applicants: 12,
-      status: "Open",
-      location: "Remote",
-      commitment: "Full-time engagement for 2-3 weeks",
-      projectName: project.name,
-    },
-    {
-      id: 2,
-      title: "UI/UX Design for Mobile App",
-      category: "Design",
-      description: "Looking for a talented UI/UX designer to create a mobile app design for our platform. You'll work on user flows, wireframes, high-fidelity mockups, and interactive prototypes. Experience with Web3 applications is a plus.",
-      skills: ["Figma", "UI/UX Design", "Mobile Design", "Prototyping", "User Research"],
-      budget: 3500,
-      deadline: "2024-07-10",
-      applicants: 8,
-      status: "Open",
-      location: "Remote",
-      commitment: "Part-time, approximately 15-20 hours per week",
-      projectName: project.name,
-    },
-    {
-      id: 3,
-      title: "Technical Documentation",
-      category: "Content",
-      description: "Create comprehensive technical documentation for our platform including API documentation, developer guides, and tutorials. Must be able to explain complex technical concepts in clear, accessible language.",
-      skills: ["Technical Writing", "API Documentation", "Markdown", "Developer Documentation"],
-      budget: 2000,
-      deadline: "2024-07-20",
-      applicants: 15,
-      status: "In Progress",
-      location: "Remote",
-      commitment: "Contract basis, approximately 40 hours total",
-      projectName: project.name,
-    },
-    {
-      id: 4,
-      title: "Community Manager",
-      category: "Marketing",
-      description: "Seeking an experienced community manager to grow and engage our community across Discord, Twitter, and Telegram. You'll be responsible for moderating discussions, creating content, organizing events, and building relationships with community members.",
-      skills: ["Community Management", "Discord", "Twitter", "Content Creation", "Web3"],
-      budget: 1500,
-      deadline: "2024-07-05",
-      applicants: 24,
-      status: "Open",
-      location: "Remote",
-      commitment: "Part-time, ongoing position (10-15 hours per week)",
-      projectName: project.name,
-    },
-  ];
+  // Mock job requests are now replaced with real blockchain data
+  // Keeping this commented for reference:
+  // const projectJobRequests: JobRequest[] = [ ... ];
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -291,15 +311,15 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
   ];
 
   const checkCanPostJobs = (): boolean => {
-    if (!currentAccount) {
+    if (!currentAccount?.address) {
       return false;
     }
     
+    const acct = currentAccount.address.toLowerCase();
     // Check if the connected wallet is a team member with job posting permission
-    const userMember = projectTeamMembers.find(m => 
-      m.address.toLowerCase() === currentAccount.address.toLowerCase()
+    const userMember = projectTeamMembers.find(
+      (m) => m.address.toLowerCase() === acct
     );
-    
     return userMember ? userMember.permissions.includes("Post jobs") : false;
   };
 
@@ -336,8 +356,117 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
     // In production, this would submit to backend/blockchain
   };
 
-  // Combine existing jobs with newly added ones
-  const allJobs = [...projectJobRequests, ...projectJobs];
+  const handleDecryptJob = async (encryptedJob: any) => {
+    if (!currentAccount) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    const jobId = encryptedJob.fields?.id?.id;
+    setDecryptingJobId(jobId);
+    toast.loading("Decrypting job...");
+
+    try {
+      const vendor = import.meta.env.VITE_PACKAGE_ID;
+      const registry = import.meta.env.VITE_REGISTRY_ID;
+      const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
+      console.log(encryptedJob.fields);
+      const jobDetails = encryptedJob.fields?.details;
+      console.log('Decrypting Job ID:', jobId);
+      console.log('Job Details (raw):', jobDetails);
+      
+      // Create session key
+      console.log("Creating session key...");
+      const sessionKey = await SessionKey.create({
+          address: currentAccount.address,
+          packageId: vendor,
+          ttlMin: 10,
+          suiClient: suiClient,
+      });
+
+      console.log("Signing session key...");
+      const message = sessionKey.getPersonalMessage();
+      const { signature } = await signPersonalMessage({ message });
+      sessionKey.setPersonalMessageSignature(signature);
+      console.log("Session key created");
+      
+      // Create the Transaction for seal_approve
+      const tx = new Transaction();
+      const idBytes = fromHex("0x1");
+      const moduleName = "ideation";
+      tx.moveCall({
+        target: `${vendor}::${moduleName}::seal_approve`,
+        arguments: [
+          tx.pure.vector("u8", idBytes),
+          tx.object(registry),
+          tx.object(project.id),
+          tx.pure.id(jobId), 
+          tx.object(account_ns_reg)
+        ]
+      });
+      const txBytes = await tx.build({ client: suiClient, onlyTransactionKind: true });
+      
+      // Convert jobDetails to Uint8Array
+      let jobDetailsBytes: Uint8Array;
+      if (jobDetails instanceof Uint8Array) {
+        jobDetailsBytes = jobDetails;
+      } else if (Array.isArray(jobDetails)) {
+        jobDetailsBytes = new Uint8Array(jobDetails);
+      } else if (typeof jobDetails === 'string') {
+        const hexString = jobDetails.startsWith('0x') ? jobDetails.slice(2) : jobDetails;
+        jobDetailsBytes = fromHex(hexString);
+      } else {
+        throw new Error("Invalid jobDetails format");
+      }
+      
+      console.log("Decrypting job data...");
+      const decryptedBytes = await sealClient.decrypt({ 
+        data: jobDetailsBytes, 
+        sessionKey, 
+        txBytes 
+      });
+      
+      const decryptedJobDetails = new TextDecoder().decode(decryptedBytes);
+      console.log("Decrypted job details:", decryptedJobDetails);
+      
+      // Parse the decrypted job details
+      const parsedJob = JSON.parse(decryptedJobDetails);
+      console.log("Parsed job:", parsedJob);
+      
+      // Convert to JobRequest format
+      const jobRequest: JobRequest = {
+        id: parsedJob.id || Date.now(),
+        title: parsedJob.title || '',
+        category: parsedJob.category || 'Development',
+        budget: parsedJob.budget || 0,
+        deadline: parsedJob.deadline || '',
+        description: parsedJob.description || '',
+        location: parsedJob.location || 'Remote',
+        requiredSkills: parsedJob.requiredSkills || [],
+        organizationContributions: parsedJob.organizationContributions || [],
+        applicants: parsedJob.applicants || 0,
+        status: parsedJob.status || 'Open',
+        postedDate: parsedJob.postedDate || new Date().toISOString(),
+      };
+      
+      // Add the decrypted job to state
+      setProjectJobs(prev => [...prev, jobRequest]);
+      console.log("✓ Successfully decrypted job:", jobRequest.title);
+      
+      toast.dismiss();
+      toast.success(`Job "${jobRequest.title}" decrypted! 🔓`);
+      
+    } catch (error) {
+      console.error("Error decrypting job:", error);
+      toast.dismiss();
+      toast.error("Failed to decrypt job. Please try again.");
+    } finally {
+      setDecryptingJobId(null);
+    }
+  };
+
+  // Use only the fetched jobs from blockchain
+  const allJobs = projectJobs;
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16">
@@ -797,75 +926,40 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-xl text-foreground mb-1">Job Requests</h3>
-                    {!currentAccount ? (
-                      <p className="text-sm text-[#FF6B00]">Connect wallet to view & post jobs</p>
-                    ) : checkCanPostJobs() ? (
-                      <p className="text-sm text-[#00FFA3]">You can post jobs for this project</p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">View-only access</p>
-                    )}
+                    <p className="text-sm text-muted-foreground">
+                      {encryptedJobs.length} total · {projectJobs.length} decrypted
+                    </p>
                   </div>
-                  {currentAccount && (
-                    <div className="flex items-center gap-3">
-                      <Badge className="bg-[#00E0FF]/20 text-[#00E0FF] border-[#00E0FF]/30">
-                        {allJobs.filter(j => j.status === "Open").length} Open
-                      </Badge>
-                      {checkCanPostJobs() && (
-                        <Button
-                          onClick={handleAddJob}
-                          size="sm"
-                          className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                        >
-                          <Briefcase className="w-4 h-4 mr-2" />
-                          Post Job
-                        </Button>
-                      )}
-                    </div>
+                  {currentAccount && checkCanPostJobs() && (
+                    <Button
+                      onClick={handleAddJob}
+                      size="sm"
+                      className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                    >
+                      <Briefcase className="w-4 h-4 mr-2" />
+                      Post Job
+                    </Button>
                   )}
                 </div>
                 <div className="space-y-3">
                   {!currentAccount ? (
-                    <div className="relative">
-                      {/* Blurred Job Cards Background */}
-                      <div className="absolute inset-0 blur-md opacity-40 pointer-events-none">
-                        <div className="p-4 mb-3 rounded-lg border border-border bg-card/50">
-                          <div className="h-4 bg-[#A0A2A8]/20 rounded w-3/4 mb-2"></div>
-                          <div className="h-3 bg-[#A0A2A8]/20 rounded w-1/2"></div>
-                        </div>
-                        <div className="p-4 mb-3 rounded-lg border border-border bg-card/50">
-                          <div className="h-4 bg-[#A0A2A8]/20 rounded w-2/3 mb-2"></div>
-                          <div className="h-3 bg-[#A0A2A8]/20 rounded w-1/3"></div>
-                        </div>
-                      </div>
-                      
-                      {/* Lock Overlay */}
-                      <div className="relative text-center py-16">
-                        <div className="relative inline-block mb-6">
-                          <div className="p-4 bg-gradient-to-br from-[#FF6B00]/20 to-[#C04BFF]/20 rounded-2xl border-2 border-[#FF6B00]/30">
-                            <Lock className="w-12 h-12 text-[#FF6B00]" />
-                          </div>
-                        </div>
-                        <h4 className="text-xl text-foreground mb-3">
-                          Wallet Connection Required
-                        </h4>
-                        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                          Connect your wallet to view available job requests, apply for positions, and post new opportunities.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
-                          <Button
-                            onClick={() => toast.info("Please use the wallet button in the top navigation to connect")}
-                            className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                          >
-                            <Wallet className="w-4 h-4 mr-2" />
-                            Connect Wallet
-                          </Button>
-                          <p className="text-sm text-muted-foreground">
-                            Secure connection via top navigation
-                          </p>
-                        </div>
-                      </div>
+                    <div className="text-center py-12">
+                      <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                      <p className="text-muted-foreground mb-4">Connect wallet to view job requests</p>
+                      <Button
+                        onClick={() => toast.info("Please use the wallet button in the top navigation to connect")}
+                        className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                      >
+                        <Wallet className="w-4 h-4 mr-2" />
+                        Connect Wallet
+                      </Button>
                     </div>
-                  ) : allJobs.length === 0 ? (
+                  ) : loadingJobs ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00E0FF] mx-auto mb-3"></div>
+                      <p className="text-muted-foreground">Loading job requests...</p>
+                    </div>
+                  ) : encryptedJobs.length === 0 && projectJobs.length === 0 ? (
                     <div className="text-center py-8">
                       <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                       <p className="text-muted-foreground mb-4">No job requests yet</p>
@@ -881,88 +975,114 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                       )}
                     </div>
                   ) : (
-                    allJobs.map((job) => (
-                    <div
-                      key={job.id}
-                      className="p-4 rounded-lg border border-border hover:border-[#00E0FF]/30 transition-all cursor-pointer group"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h4 className="text-foreground group-hover:text-[#00E0FF] transition-colors">
-                              {job.title}
-                            </h4>
-                            <Badge className={getStatusColor(job.status)}>
-                              {job.status}
-                            </Badge>
+                    <>
+                      {/* Show decrypted jobs */}
+                      {projectJobs.map((job) => (
+                        <div
+                          key={job.id}
+                          className="p-4 rounded-lg border border-border hover:border-[#00E0FF]/30 transition-all group"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="text-foreground group-hover:text-[#00E0FF] transition-colors">
+                                  {job.title}
+                                </h4>
+                                <Badge className={getStatusColor(job.status)}>
+                                  {job.status}
+                                </Badge>
+                                <Badge className="bg-[#00FFA3]/20 text-[#00FFA3] border-[#00FFA3]/30">
+                                  Decrypted
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                  {getCategoryIcon(job.category)}
+                                  <span>{job.category}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Users className="w-3 h-3" />
+                                  <span>{job.applicants} applicants</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                              {getCategoryIcon(job.category)}
-                              <span>{job.category}</span>
+                          <div className="flex items-center justify-between pt-2 border-t border-border">
+                            <div>
+                              <div className="text-lg text-[#00E0FF]">
+                                {formatCurrency(job.budget)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Due {new Date(job.deadline).toLocaleDateString()}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <Users className="w-3 h-3" />
-                              <span>{job.applicants} applicants</span>
-                            </div>
+                            {job.status === "Open" && (
+                              <Button 
+                                size="sm"
+                                onClick={() => handleApplyClick(job)}
+                                className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] h-8 text-xs"
+                              >
+                                Apply
+                                <ExternalLink className="w-3 h-3 ml-1" />
+                              </Button>
+                            )}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-border">
-                        <div>
-                          <div className="text-lg text-[#00E0FF]">
-                            {formatCurrency(job.budget)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Due {new Date(job.deadline).toLocaleDateString()}
-                          </div>
-                        </div>
-                        {job.status === "Open" && (
-                          <Button 
-                            size="sm"
-                            onClick={() => handleApplyClick(job)}
-                            className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] h-8 text-xs"
+                      ))}
+                      
+                      {/* Show encrypted jobs */}
+                      {encryptedJobs.map((encJob, idx) => {
+                        const jobId = encJob.fields?.id?.id;
+                        const isDecrypted = projectJobs.some(j => j.id.toString().includes(jobId?.slice(-8) || ''));
+                        const isDecrypting = decryptingJobId === jobId;
+                        
+                        // Skip if already decrypted
+                        if (isDecrypted) return null;
+                        
+                        return (
+                          <div
+                            key={jobId || idx}
+                            className="p-4 rounded-lg border border-[#FF6B00]/30 bg-card/50 backdrop-blur-sm relative"
                           >
-                            Apply
-                            <ExternalLink className="w-3 h-3 ml-1" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    ))
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Lock className="w-5 h-5 text-[#FF6B00]" />
+                                <div>
+                                  <h4 className="text-foreground mb-1">Encrypted Job Request #{idx + 1}</h4>
+                                  <p className="text-sm text-muted-foreground">
+                                    Click decrypt to view full details
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => handleDecryptJob(encJob)}
+                                disabled={isDecrypting}
+                                className="bg-gradient-to-r from-[#FF6B00] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                              >
+                                {isDecrypting ? (
+                                  <>
+                                    <Lock className="w-4 h-4 mr-2 animate-pulse" />
+                                    Decrypting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="w-4 h-4 mr-2" />
+                                    Decrypt
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
                   )}
                 </div>
-                {allJobs.length > 0 && (
-                  <Button 
-                    variant="outline"
-                    className="w-full mt-4 border-border text-foreground hover:bg-card"
-                  >
-                    <Briefcase className="w-4 h-4 mr-2" />
-                    View All Jobs
-                  </Button>
-                )}
               </Card>
             </motion.div>
 
-            {/* Risk Notice */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-            >
-              <Card className="p-4 bg-[#FF6B00]/10 border-[#FF6B00]/30 backdrop-blur-sm">
-                <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-[#FF6B00] flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-[#FF6B00] mb-1">Investment Notice</h4>
-                    <p className="text-muted-foreground text-sm">
-                      All investments carry risk. Only invest what you can afford to lose. 
-                      Do your own research before backing any project.
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
+    
           </div>
         </div>
       </div>
@@ -981,6 +1101,7 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
         open={showAddJobDialog}
         onOpenChange={setShowAddJobDialog}
         projectName={project.name}
+        projectId={project.id}
         onJobAdded={handleJobAdded}
       />
 

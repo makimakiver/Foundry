@@ -7,7 +7,7 @@ import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { Card } from "./ui/card";
 import { Separator } from "./ui/separator";
-import { useWallet } from "../contexts/WalletContext";
+import { useCurrentAccount } from "@mysten/dapp-kit";
 import {
   Briefcase,
   DollarSign,
@@ -72,7 +72,9 @@ export function JobApplicationDialog({
   job,
   onSubmit,
 }: JobApplicationDialogProps) {
-  const { isConnected, walletAddress } = useWallet();
+  const account = useCurrentAccount();
+  const isConnected = !!account;
+  const walletAddress = account?.address || "";
   const [step, setStep] = useState<"details" | "application">("details");
   const [formData, setFormData] = useState<ApplicationData>({
     name: "",

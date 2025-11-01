@@ -80,19 +80,32 @@ export function AddJobRequestDialog({
   projectId,
   onJobAdded,
 }: AddJobRequestDialogProps) {
+  // ALL HOOKS MUST BE CALLED FIRST - before any conditional returns
   const currentAccount = useCurrentAccount();
   const { mutate: signPersonalMessage } = useSignPersonalMessage();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [budget, setBudget] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
+  const [skillAmounts, setSkillAmounts] = useState<{ [skill: string]: number }>({});
+  const [newSkill, setNewSkill] = useState("");
+  const [organizationContributions, setOrganizationContributions] = useState<string[]>([]);
+  const [orgAmounts, setOrgAmounts] = useState<{ [org: string]: number }>({});
+  const [newContribution, setNewContribution] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Non-hook initializations
   const client = new SuiJsonRpcClient({
     url: getFullnodeUrl('testnet'),
     network: 'testnet',
   });
-  if (!currentAccount) {
-    toast.error("Please connect your wallet first");
-    return;
-  }
+  
   const packageId = '0xc58a26ab2751fbae42888dda3ed47637703018ec8969de8fae2b4aba6ba1bfd3';
-  // Replace this with a list of custom key server object IDs.
-  // const serverObjectIds = getAllowlistedKeyServers('testnet');
   const whitelistedId = "0x18959ea37ee943aae83b0a40662d3b94cb4b78070be8c9275178da0966094553";
   const serverObjectIds = [
       "0x164ac3d2b3b8694b8181c13f671950004765c23f270321a45fdd04d40cccf0f2", 
@@ -110,21 +123,6 @@ export function AddJobRequestDialog({
   const vendor = import.meta.env.VITE_PACKAGE_ID;
   const registry = import.meta.env.VITE_REGISTRY_ID;
   const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
-  
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
-  const [budget, setBudget] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [description, setDescription] = useState("");
-  const [location, setLocation] = useState("");
-  const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
-  const [skillAmounts, setSkillAmounts] = useState<{ [skill: string]: number }>({});
-  const [newSkill, setNewSkill] = useState("");
-  const [organizationContributions, setOrganizationContributions] = useState<string[]>([]);
-  const [orgAmounts, setOrgAmounts] = useState<{ [org: string]: number }>({});
-  const [newContribution, setNewContribution] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const handleAddSkill = (skill: string) => {
     if (skill && !requiredSkills.includes(skill)) {
@@ -165,6 +163,12 @@ export function AddJobRequestDialog({
   };
   
   const handleSubmit = async () => {
+    // Check wallet connection first
+    if (!currentAccount) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+    
     // Validation
     if (!title.trim()) {
       toast.error("Please enter a job title");
@@ -196,15 +200,15 @@ export function AddJobRequestDialog({
       return;
     }
     
-    if (requiredSkills.length === 0) {
-      toast.error("Please add at least one required skill");
-      return;
-    }
+    // if (requiredSkills.length === 0) {
+    //   toast.error("Please add at least one required skill");
+    //   return;
+    // }
     
-    if (organizationContributions.length === 0) {
-      toast.error("Please add at least one organization contribution");
-      return;
-    }
+    // if (organizationContributions.length === 0) {
+    //   toast.error("Please add at least one organization contribution");
+    //   return;
+    // }
     
     
     setIsSubmitting(true);
@@ -249,12 +253,19 @@ export function AddJobRequestDialog({
     console.log('================================');
     
     try {
+      if (!currentAccount?.address) {
+        toast.dismiss();
+        toast.error("Please connect your wallet first");
+        setIsSubmitting(false);
+        return;
+      }
+      const ownerAddress = currentAccount.address;
       // Fetch USDC coins from user's wallet
       const usdcCoinType = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
       console.log('Fetching USDC coins from wallet...');
       
       const coinsResponse = await client.getCoins({
-        owner: currentAccount.address,
+        owner: ownerAddress,
         coinType: usdcCoinType,
       });
       
@@ -279,7 +290,13 @@ export function AddJobRequestDialog({
         setIsSubmitting(false);
         return;
       }
-      encryptJobDetails(newJob);
+      const encryptedBytes = await encryptJobDetails(newJob);
+      if (!encryptedBytes) {
+        toast.dismiss();
+        toast.error("Failed to encrypt job details");
+        setIsSubmitting(false);
+        return;
+      }
       const tx = new Transaction();
       
       // Merge all USDC coins if there are multiple
@@ -294,17 +311,18 @@ export function AddJobRequestDialog({
       
       // Split the required amount from the primary coin
       const [coin] = tx.splitCoins(tx.object(primaryCoin), [budgetAmount.toString()]);
-      
+      console.log(requiredSkills, roleAmounts, organizationContributions, orgAmountsArray, ownerAddress, categoryNum, encryptedBytes, coin);
       tx.moveCall({
         target: `${vendor}::ideation::create_job`,
         arguments: [
           tx.object(registry),
           tx.object(projectId),
+          tx.pure.vector('u8', encryptedBytes),
           tx.pure.vector('string', requiredSkills),
           tx.pure.vector('u64', roleAmounts),
           tx.pure.vector('string', organizationContributions),
           tx.pure.vector('u64', orgAmountsArray),
-          tx.pure.address(currentAccount.address),
+          tx.pure.address(ownerAddress),
           tx.pure.u64(categoryNum),
           coin,
         ],
@@ -351,57 +369,17 @@ export function AddJobRequestDialog({
         console.log("Encrypting data...");
         const { encryptedObject: encryptedBytes, key: backupKey } = await sealClient.encrypt({
             threshold: 1,
-            packageId: packageId,
-            id: whitelistedId,
+            packageId: vendor,
+            id: "0x1",
             data
         });
         console.log("Encrypted bytes:", encryptedBytes);
         const parsed = EncryptedObject.parse(encryptedBytes);
         const identityBytes = parsed.id; // vector<u8> used at encrypt time
-        console.log("Identity bytes:", identityBytes);
-        console.log("Creating session key...");
-
-        // const sessionKey = await SessionKey.create({
-        //     address: currentAccount.address,
-        //     packageId: packageId,
-        //     ttlMin: 10, // TTL of 10 minutes
-        //     suiClient: new SuiClient({ url: getFullnodeUrl('testnet') }),
-        // });
-        // console.log("Signing session key...");
-        // const message = sessionKey.getPersonalMessage();
-        // console.log("Message created...");
-        // signPersonalMessage({ message }); // User confirms in wallet
-        // console.log("Signature created...");
-        // sessionKey.setPersonalMessageSignature(signature); // Initialization complete
-        // console.log("Session key created...");
-        // const moduleName = "access_control";
-        // // Create the Transaction for evaluating the seal_approve function.
-        // console.log("Creating transaction...");
-        // const tx = new Transaction();
-        // // const idBytes = hexToBytes(whitelistedId);
-        // const idBytes = hexToBytes(packageId);
-        // // const idBytes = fromHex("0x11");
-        // console.log(idBytes)
-        // // const idBytes = hexToBytes("0x01"); -> If you do not put the white list ID, seal will invalidate you!!
-        // tx.moveCall({
-        //     // target: `${packageId}::${moduleName}::seal_approve_all`,
-        //     target: `${packageId}::${moduleName}::seal_approve`,
-        //     arguments: [
-        //         tx.pure.vector("u8", idBytes)
-        //     ]
-        // });
-        // const txBytes = await tx.build({ client: suiClient, onlyTransactionKind: true });
-        // console.log("Transaction information: ",txBytes);
         
-        // console.log("Decrypting data...");
-        // const decryptedBytes = await client.decrypt({
-        //     data: encryptedBytes,
-        //     sessionKey,
-        //     txBytes,
-        // });
-        // console.log("len:", decryptedBytes.length);
-        // console.log("str:", new TextDecoder().decode(decryptedBytes));
-        // console.log("Decrypted data:", decryptedBytes);
+        console.log("Identity bytes: ", identityBytes);
+        console.log("Creating session key...");
+        return encryptedBytes;
     } catch (error) {
         console.log("Error occured")
         console.log("Error:", error);
@@ -745,7 +723,7 @@ export function AddJobRequestDialog({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !title || !category || !budget || !deadline || !description || !location || requiredSkills.length === 0 || organizationContributions.length === 0}
+              disabled={isSubmitting || !title || !category || !budget || !deadline || !description || !location }
               className="flex-1 bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] disabled:opacity-50"
             >
               <Briefcase className="w-4 h-4 mr-2" />
@@ -757,4 +735,3 @@ export function AddJobRequestDialog({
     </Dialog>
   );
 }
-

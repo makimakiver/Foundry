@@ -60,7 +60,7 @@ module vendor3::ideation {
     public struct Job has key, store {
         id: UID,
         validator: address,
-        // details: Blob,
+        details: vector<u8>,
         state: State,
         category: u64,
         prize_pool: Balance<USDC>,
@@ -167,31 +167,51 @@ module vendor3::ideation {
         requirement
     }
 
+    fun find_job_index(id: ID, vault: &JobVault): u64 {
+        let len = vault.jobs.length();
+        let mut i = 0;
+        while (i < len) {
+            if (vault.jobs.borrow(i).id.to_inner() == id) return i;
+            i = i + 1;
+        };
+        abort 0
+    }
     // --- Entry function
-    entry fun seal_approval(id: vector<u8>, self: &Job, registry: &AccountNSRegistry, ctx: &TxContext){
-        let domain_holdings = registry.registry.borrow(ctx.sender());
-        let role = suins_util::decompose_role_vector(domain_holdings);
-        let requirement_role = self.requirement.role;
-        let requirement_role_num = self.requirement.role_amount;
-        // let mut count = 0;
-        assert!(requirement_role.length() == requirement_role_num.length(), 0);
-        range_do!(0, requirement_role.length(), |i| {
-            let label = requirement_role.borrow(i);
-            let required_role_amount = requirement_role_num.borrow(i);
-            let role_holding = vector::count!(&role, |holding: &String| holding == label);
-            assert!(role_holding >= *required_role_amount, 1)
-        });
-        let org = suins_util::decompose_org_vector(domain_holdings);
-        let requirement_org = self.requirement.org;
-        let requirement_org_num = self.requirement.org_amount;
-        // let mut count = 0;
-        assert!(requirement_org.length() == requirement_org_num.length(), 2);
-        range_do!(0, requirement_org.length(), |i| {
-            let label = requirement_org.borrow(i);
-            let required_org_amount = requirement_org_num.borrow(i);
-            let org_holding = vector::count!(&org, |holding: &String| holding == label);
-            assert!(org_holding >= *required_org_amount, 3)
-        });
+    entry fun seal_approve(id: vector<u8>, aggregator: &Registry, project: &Project, job_id: ID, registry: &AccountNSRegistry, ctx: &TxContext){
+        let vault = aggregator.project_jobs.borrow(project.id.to_inner());
+        let job_idx = find_job_index(job_id, vault);
+        let job = vault.jobs.borrow(job_idx);
+        if (registry.registry.contains(ctx.sender())){
+            let domain_holdings = registry.registry.borrow(ctx.sender());
+            let role = suins_util::decompose_role_vector(domain_holdings);
+            let requirement_role = job.requirement.role;
+            let requirement_role_num = job.requirement.role_amount;
+            // let mut count = 0;
+            assert!(requirement_role.length() == requirement_role_num.length(), 0);
+            range_do!(0, requirement_role.length(), |i| {
+                let label = requirement_role.borrow(i);
+                let required_role_amount = requirement_role_num.borrow(i);
+                let role_holding = vector::count!(&role, |holding: &String| holding == label);
+                assert!(role_holding >= *required_role_amount, 1)
+            });
+            let org = suins_util::decompose_org_vector(domain_holdings);
+            let requirement_org = job.requirement.org;
+            let requirement_org_num = job.requirement.org_amount;
+            // let mut count = 0;
+            assert!(requirement_org.length() == requirement_org_num.length(), 2);
+            range_do!(0, requirement_org.length(), |i| {
+                let label = requirement_org.borrow(i);
+                let required_org_amount = requirement_org_num.borrow(i);
+                let org_holding = vector::count!(&org, |holding: &String| holding == label);
+                assert!(org_holding >= *required_org_amount, 3)
+            });
+        }
+        else{
+            let requirement_role = job.requirement.role;
+            assert!(requirement_role.length() == 0, 4);
+            let requirement_org = job.requirement.org;
+            assert!(requirement_org.length() == 0, 5);
+        }
     }
 
 
@@ -213,6 +233,7 @@ module vendor3::ideation {
     public fun create_job(
         self: &mut Registry,
         project: &Project,
+        details: vector<u8>,
         role: vector<String>,
         role_amount: vector<u64>,
         org: vector<String>,
@@ -226,6 +247,7 @@ module vendor3::ideation {
         let job = Job {
             id: object::new(ctx),
             validator,
+            details,
             state: State::Hiring,
             category,
             prize_pool: coin.into_balance(),

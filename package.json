@@ -3,6 +3,7 @@
       "version": "0.1.0",
       "private": true,
       "dependencies": {
+            "@mysten/bcs": "^1.9.2",
             "@mysten/dapp-kit": "^0.19.6",
             "@mysten/seal": "^0.9.3",
             "@mysten/sui": "^1.43.1",

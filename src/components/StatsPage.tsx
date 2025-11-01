@@ -11,7 +11,7 @@ import { AddJobRequestDialog, type JobRequest } from "./AddJobRequestDialog";
 import { JobApplicationDialog } from "./JobApplicationDialog";
 import { CompleteJobDialog } from "./CompleteJobDialog";
 import { HireApplicantsDialog } from "./HireApplicantsDialog";
-import { useWallet } from "../contexts/WalletContext";
+// Removed custom wallet context usage; relying on dapp-kit hooks elsewhere
 import { motion } from "motion/react";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { getFullnodeUrl } from "@mysten/sui/client";

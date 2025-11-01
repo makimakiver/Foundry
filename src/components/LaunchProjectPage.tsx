@@ -138,7 +138,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     }
     
     // Additional validation: Check if address property exists
-    if (!currentAccount.address) {
+    if (!currentAccount?.address) {
       console.error('❌ CRITICAL: currentAccount exists but address is missing!');
       console.error('   currentAccount structure:', JSON.stringify(currentAccount, null, 2));
       toast.error('Wallet address not available. Please reconnect your wallet.');
@@ -348,10 +348,10 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           arguments: [
             tx.object(account_ns_reg),       // shared object
             tx.object(extrasubnameNft),      // must be owned by sender or have the required cap
-            tx.pure.address(currentAccount.address),
+            tx.pure.address(founderAddress!),
           ],
         });
-        tx.transferObjects([extrasubnameNft], tx.pure.address(currentAccount.address));
+        tx.transferObjects([extrasubnameNft], tx.pure.address(founderAddress!));
         console.log('[2] transfer to receiver…');
         console.log(data.teamMembers)
         if (data.teamMembers.length > 0 && data.teamMembers[0].name !== ''){
@@ -370,14 +370,14 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
                 tx.pure.bool(false),
               ],
             });
-            // tx.moveCall({
-            //   target: `${vendor}::ideation::add_job_identity_info`,
-            //   arguments: [
-            //     tx.object(account_ns_reg),       // shared object
-            //     memberSubnameNft,      // must be owned by sender or have the required cap
-            //     tx.pure.address(member.name),
-            //   ],
-            // });
+            tx.moveCall({
+              target: `${vendor}::ideation::add_job_identity_info`,
+              arguments: [
+                tx.object(account_ns_reg),       // shared object
+                tx.object(memberSubnameNft),      // must be owned by sender or have the required cap
+                tx.pure.address(member.name),
+              ],
+            });
             tx.transferObjects([memberSubnameNft], tx.pure.address(member.name));
           }
         }

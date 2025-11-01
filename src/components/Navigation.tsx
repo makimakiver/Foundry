@@ -8,14 +8,10 @@ import { Button } from "./ui/button";
 type Page = "projects" | "launch" | "stats";
 
 interface NavigationProps {
-  isConnected: boolean;
-  walletAddress: string;
-  onConnect: () => void;
-  onDisconnect: () => void;
   onNavigate: (page: Page) => void;
 }
 
-export function Navigation({ isConnected, walletAddress, onConnect, onDisconnect, onNavigate }: NavigationProps) {
+export function Navigation({ onNavigate }: NavigationProps) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   
@@ -85,12 +81,7 @@ export function Navigation({ isConnected, walletAddress, onConnect, onDisconnect
                 <Moon className="w-5 h-5 text-muted-foreground hover:text-foreground transition-colors" />
               )}
             </Button>
-            <WalletButton
-              isConnected={isConnected}
-              walletAddress={walletAddress}
-              onConnect={onConnect}
-              onDisconnect={onDisconnect}
-            />
+            <WalletButton />
           </div>
         </div>
       </div>

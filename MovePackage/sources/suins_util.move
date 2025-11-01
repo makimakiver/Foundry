@@ -9,7 +9,7 @@ module vendor3::suins_util{
         range_do!(0, self.length(), |i| {
             let domain_name = self.borrow(i);
             let labels = split_by_dot(*domain_name);
-            result.push_back(*labels.borrow(2));
+            result.push_back(*labels.borrow(1));
         });
         result
     }
@@ -19,7 +19,7 @@ module vendor3::suins_util{
         range_do!(0, self.length(), |i| {
             let domain_name = self.borrow(i);
             let labels = split_by_dot(*domain_name);
-            result.push_back(*labels.borrow(3));
+            result.push_back(*labels.borrow(0));
         });
         result
     }

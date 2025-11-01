@@ -12,19 +12,7 @@ import { Wallet, LogOut, Copy, CheckCircle2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { ConnectModal, useCurrentAccount, useDisconnectWallet } from '@mysten/dapp-kit';
 
-interface WalletButtonProps {
-  isConnected: boolean;
-  walletAddress: string;
-  onConnect: () => void;
-  onDisconnect: () => void;
-}
-
-export function WalletButton({ 
-  isConnected, 
-  walletAddress, 
-  onConnect, 
-  onDisconnect 
-}: WalletButtonProps) {
+export function WalletButton() {
   const [copied, setCopied] = useState(false);
 
   const formatAddress = (address: string) => {
@@ -54,7 +42,8 @@ export function WalletButton({
   }
   const handleCopyAddress = async () => {
     try {
-      await navigator.clipboard.writeText(walletAddress);
+      if (!account?.address) return;
+      await navigator.clipboard.writeText(account.address);
       setCopied(true);
       toast.success('Address copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
@@ -97,8 +86,10 @@ export function WalletButton({
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-[#E8E9EB]/10" />
         <DropdownMenuItem 
-          onSelect={() => {
-             disconnect.mutate();
+          onSelect={(e: React.MouseEvent<HTMLDivElement>) => {
+            e.preventDefault();
+            disconnect.mutateAsync();
+
           }}
           className="gap-2 text-[#FF3366] focus:text-[#FF3366] focus:bg-[#0D0E10] cursor-pointer"
         >

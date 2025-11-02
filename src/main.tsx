@@ -23,5 +23,5 @@ createRoot(document.getElementById('root')!).render(
 				</WalletProvider>
 			</SuiClientProvider>
 		</QueryClientProvider>
-	</React.StrictMode>,
+	</React.StrictMode>
 );

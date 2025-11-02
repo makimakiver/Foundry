@@ -5,15 +5,16 @@ module vendor3::ideation {
     use sui::table::{Self, Table};
     use usdc::usdc::{USDC};
     use sui::balance::{Self, Balance};
+    use sui::clock::{Self, Clock};
     use sui::coin::{Self, Coin};
     use sui::dynamic_object_field as df;
     use sui::dynamic_object_field as dof;
     use suins::suins_registration::{SuinsRegistration};
     use suins::subdomain_registration::{SubDomainRegistration};
-    use vendor3::contribution::{MovePackage};
+    use vendor3::contribution::{Self, Application};
     use vendor3::suins_util;
-    use vendor3::community::{Self, Proposal, Proposals};
     use walrus::blob::{Blob};
+    use sui::coin::from_balance;
 
     // ---Enum
     public enum State has copy, drop, store {
@@ -64,7 +65,11 @@ module vendor3::ideation {
         state: State,
         category: u64,
         prize_pool: Balance<USDC>,
-        requirement: Requirement
+        requirement: Requirement,
+        applicants: vector<address>,
+        applications: Table<address, Application>,
+        selected: vector<address>,
+        num_workers: u64,
     }
 
     public struct Requirement has key, store {
@@ -214,8 +219,6 @@ module vendor3::ideation {
         }
     }
 
-
-    // --- Entry function
     entry fun add_address_to_project_id(
         self: &mut Registry,
         project: &Project,
@@ -230,6 +233,26 @@ module vendor3::ideation {
         }
     }
 
+    // submitting the application to job request
+    entry fun submit_application(self: &mut Job, resume: Blob, details: Blob, clock: &Clock, ctx: &mut TxContext){
+        assert!(!self.applicants.contains(&ctx.sender()), 0);
+        assert!(!self.applications.contains(ctx.sender()), 1);
+        let application = contribution::mint_application(resume, details, clock, ctx);
+        self.applications.add(ctx.sender(), application);
+        self.applicants.push_back(ctx.sender());
+    }
+
+    // add target to the execution team
+    entry fun add_member(self: &mut Job, target: address, ctx: &TxContext){
+        assert!(ctx.sender() == self.validator, 0);
+        assert!(self.applicants.contains(&target), 1);
+        assert!(self.applications.contains(target), 2);
+        self.selected.push_back(target);
+        if(self.num_workers == self.selected.length()){
+            self.state = State::InProgress;
+        };
+    }
+    // --- Public function
     public fun create_job(
         self: &mut Registry,
         project: &Project,
@@ -241,6 +264,8 @@ module vendor3::ideation {
         validator: address,
         category: u64,
         coin: Coin<USDC>,
+        max_people: u64,
+
         ctx: &mut TxContext
     ){
         let requirement = mint_requirement(role, role_amount, org, org_amount, ctx);
@@ -251,12 +276,15 @@ module vendor3::ideation {
             state: State::Hiring,
             category,
             prize_pool: coin.into_balance(),
-            requirement
+            requirement,
+            applicants: vector::empty<address>(),
+            applications: table::new<address, Application>(ctx),
+            selected: vector::empty<address>(),
+            num_workers: max_people
         };
         self.project_jobs.borrow_mut(project.id.to_inner()).jobs.push_back(job);
     }
 
-    // --- Public function
     public fun add_job_identity_info(
         self: &mut AccountNSRegistry,
         role: &SubDomainRegistration,
@@ -295,5 +323,17 @@ module vendor3::ideation {
         project_addr
     }
 
-
+    #[allow(lint(self_transfer))]
+    public fun complete_job(self: &mut Job, ctx: &mut TxContext) {
+        assert!(ctx.sender() == self.validator, 0);
+        let mut reward = self.prize_pool.withdraw_all();
+        self.state = State::Completed;
+        let reward_amount = reward.value();
+        range_do!(0, self.selected.length(), |i| {
+            let amount = reward_amount / self.selected.length();
+            let salary = reward.split(amount);
+            transfer::public_transfer(salary.into_coin(ctx), *self.selected.borrow(i));
+        });
+        transfer::public_transfer(reward.into_coin(ctx), ctx.sender());
+    }
 }

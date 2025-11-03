@@ -1042,6 +1042,35 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                         // Skip if already decrypted
                         if (isDecrypted) return null;
                         
+                        // Parse non-encrypted metadata
+                        const fields = encJob.fields || {};
+                        const categoryNum = Number(fields.category || 0);
+                        const categoryMap: { [key: number]: string } = {
+                          0: "Development",
+                          1: "Design",
+                          2: "Content",
+                          3: "Marketing",
+                        };
+                        const category = categoryMap[categoryNum] || "Development";
+                        
+                        // Parse job state from blockchain
+                        const stateVariant = fields.state?.variant || "Open";
+                        const statusMap: { [key: string]: string } = {
+                          "Open": "Open",
+                          "Hiring": "Hiring",
+                          "InProgress": "In Progress",
+                          "Completed": "Completed",
+                          "Closed": "Closed",
+                        };
+                        const status = statusMap[stateVariant] || "Open";
+                        
+                        console.log('Encrypted job state (ProjectDetailsPage):', {
+                          jobId: jobId,
+                          stateVariant: stateVariant,
+                          mappedStatus: status,
+                          rawState: fields.state
+                        });
+                        
                         return (
                           <div
                             key={jobId || idx}
@@ -1054,13 +1083,23 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                                   <div className="flex items-center gap-2 mb-2">
                                     <Lock className="w-4 h-4 text-[#FF6B00]" />
                                     <h4 className="text-foreground">Encrypted Job Request #{idx + 1}</h4>
+                                    <Badge className={getStatusColor(status)}>
+                                      {status}
+                                    </Badge>
                                     <Badge className="bg-[#FF6B00]/20 text-[#FF6B00] border-[#FF6B00]/30">
                                       🔒 Locked
                                     </Badge>
                                   </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    Connect your wallet and decrypt to view job details
-                                  </p>
+                                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                    <div className="flex items-center gap-1">
+                                      {getCategoryIcon(category)}
+                                      <span>{category}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Lock className="w-3 h-3" />
+                                      <span>Details encrypted</span>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
 

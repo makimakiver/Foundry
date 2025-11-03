@@ -235,7 +235,7 @@ module vendor3::ideation {
 
     // submitting the application to job request
     entry fun submit_application(aggregator: &mut Registry, project: &Project, job_id: ID, details: Blob, clock: &Clock, ctx: &mut TxContext){
-        let mut vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
+        let vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
         let job_idx = find_job_index(job_id, vault);
         let job = vault.jobs.borrow_mut(job_idx);
         assert!(!job.applicants.contains(&ctx.sender()), 0);
@@ -246,13 +246,16 @@ module vendor3::ideation {
     }
 
     // add target to the execution team
-    entry fun add_member(self: &mut Job, target: address, ctx: &TxContext){
-        assert!(ctx.sender() == self.validator, 0);
-        assert!(self.applicants.contains(&target), 1);
-        assert!(self.applications.contains(target), 2);
-        self.selected.push_back(target);
-        if(self.num_workers == self.selected.length()){
-            self.state = State::InProgress;
+    entry fun add_member(aggregator: &mut Registry, project: &Project, job_id: ID, target: address, ctx: &TxContext){
+        let vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
+        let job_idx = find_job_index(job_id, vault);
+        let job = vault.jobs.borrow_mut(job_idx);
+        assert!(ctx.sender() == job.validator, 0);
+        assert!(job.applicants.contains(&target), 1);
+        assert!(job.applications.contains(target), 2);
+        job.selected.push_back(target);
+        if(job.num_workers == job.selected.length()){
+            job.state = State::InProgress;
         };
     }
     // --- Public function
@@ -327,15 +330,18 @@ module vendor3::ideation {
     }
 
     #[allow(lint(self_transfer))]
-    public fun complete_job(self: &mut Job, ctx: &mut TxContext) {
-        assert!(ctx.sender() == self.validator, 0);
-        let mut reward = self.prize_pool.withdraw_all();
-        self.state = State::Completed;
+    public fun complete_job(aggregator: &mut Registry, project: &Project, job_id: ID, ctx: &mut TxContext) {
+        let vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
+        let job_idx = find_job_index(job_id, vault);
+        let job = vault.jobs.borrow_mut(job_idx);
+        assert!(ctx.sender() == job.validator, 0);
+        let mut reward = job.prize_pool.withdraw_all();
+        job.state = State::Completed;
         let reward_amount = reward.value();
-        range_do!(0, self.selected.length(), |i| {
-            let amount = reward_amount / self.selected.length();
+        range_do!(0, job.selected.length(), |i| {
+            let amount = reward_amount / job.selected.length();
             let salary = reward.split(amount);
-            transfer::public_transfer(salary.into_coin(ctx), *self.selected.borrow(i));
+            transfer::public_transfer(salary.into_coin(ctx), *job.selected.borrow(i));
         });
         transfer::public_transfer(reward.into_coin(ctx), ctx.sender());
     }

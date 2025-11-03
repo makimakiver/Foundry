@@ -16,6 +16,8 @@ import {
   AlertCircle
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
+import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
 
 interface Application {
   id: string;
@@ -23,23 +25,27 @@ interface Application {
   email: string;
   status: "pending" | "accepted" | "rejected";
   appliedDate: string;
+  walletAddress?: string; // Wallet address of the applicant
 }
 
 interface Job {
-  id: string;
+  id: number | string;
   title: string;
   description: string;
   category: string;
   budget: number;
   deadline: string;
-  status: "Open" | "In Progress" | "Completed" | "Closed";
+  status: "Open" | "Hiring" | "In Progress" | "Completed" | "Closed";
   requiredSkills: string[];
   postedDate: string;
+  blockchainJobId?: string; // Blockchain job object ID
+  projectId?: string; // Blockchain project object ID
 }
 
 interface CompleteJobDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId: string;
   job: Job | null;
   applications: Application[];
   onComplete: (jobId: string, completionData: {
@@ -54,8 +60,15 @@ export function CompleteJobDialog({
   onOpenChange,
   job,
   applications,
+  projectId,
   onComplete,
 }: CompleteJobDialogProps) {
+  const client = useSuiClient();
+  const vendor = import.meta.env.VITE_PACKAGE_ID;
+  const registry = import.meta.env.VITE_REGISTRY_ID;
+  console.log('Project ID:', projectId);
+  const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const [selectedApplicantId, setSelectedApplicantId] = useState<string | undefined>(undefined);
   const [completionNotes, setCompletionNotes] = useState("");
   const [finalStatus, setFinalStatus] = useState<"Completed" | "Closed">("Completed");
@@ -71,22 +84,75 @@ export function CompleteJobDialog({
       return;
     }
 
+    if (!projectId) {
+      toast.error("Project ID is missing");
+      return;
+    }
+
+    // Get blockchain job ID
+    const blockchainJobId = job.blockchainJobId || job.id.toString();
+    
+    if (!blockchainJobId) {
+      toast.error("Job blockchain ID is missing");
+      return;
+    }
+
+    console.log('Completing job:', {
+      projectId,
+      blockchainJobId,
+      jobId: job.id,
+      selectedApplicantId,
+      finalStatus
+    });
+
     setIsSubmitting(true);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Build transaction
+      const tx = new Transaction();
+      
+      // Find the applicant's wallet address from selectedApplicantId
+      let applicantAddress: string | undefined;
+      if (selectedApplicantId) {
+        const selectedApp = applications.find(app => app.id === selectedApplicantId);
+        if (selectedApp?.walletAddress) {
+          applicantAddress = selectedApp.walletAddress;
+        } else if (selectedApplicantId.startsWith('0x')) {
+          // If the ID itself is a wallet address
+          applicantAddress = selectedApplicantId;
+        } else {
+          console.warn('Could not find wallet address for applicant:', selectedApplicantId);
+        }
+      }
 
-      onComplete(job.id, {
+      if (finalStatus === "Completed" && selectedApplicantId && applicantAddress) {
+        // Complete job with selected applicant
+        tx.moveCall({
+          target: `${vendor}::ideation::complete_job`,
+          arguments: [
+            tx.object(registry),
+            tx.object(projectId),
+            tx.object(blockchainJobId)
+          ],
+        });
+      }
+
+      toast.loading('Submitting job completion to blockchain...');
+      const result = await signAndExecuteTransaction({ transaction: tx });
+      console.log('Job completion transaction successful:', result);
+
+      // Call the callback to update local state
+      onComplete(blockchainJobId, {
         selectedApplicantId,
         completionNotes: completionNotes.trim(),
         finalStatus,
-      });
+      }); 
 
+      toast.dismiss();
       toast.success(
         finalStatus === "Completed" 
-          ? "Job marked as completed successfully!" 
-          : "Job closed successfully!"
+          ? "Job marked as completed successfully! 🎉" 
+          : "Job closed successfully! ✅"
       );
 
       // Reset form
@@ -95,6 +161,8 @@ export function CompleteJobDialog({
       setFinalStatus("Completed");
       onOpenChange(false);
     } catch (error) {
+      console.error('Error completing job:', error);
+      toast.dismiss();
       toast.error("Failed to complete job. Please try again.");
     } finally {
       setIsSubmitting(false);

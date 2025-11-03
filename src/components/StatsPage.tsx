@@ -69,8 +69,10 @@ import {
   ResponsiveContainer 
 } from "recharts";
 import { toast } from "sonner@2.0.3";
-import { useCurrentAccount } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSignPersonalMessage, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
+import { fromHex } from "@mysten/bcs";
+import { SealClient, SessionKey } from "@mysten/seal";
 
 // Project class matching the blockchain data structure
 class Project {
@@ -234,6 +236,23 @@ export function StatsPage() {
   const currentAccount = useCurrentAccount();
   const walletAddress = currentAccount?.address;
   const isConnected = !!currentAccount;
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
+  const suiClient = useSuiClient();
+  
+  // Server object IDs for SEAL
+  const serverObjectIds = [
+    "0x164ac3d2b3b8694b8181c13f671950004765c23f270321a45fdd04d40cccf0f2", 
+    "0x5466b7df5c15b508678d51496ada8afab0d6f70a01c10613123382b1b8131007"
+  ];
+  
+  const sealClient = new SealClient({
+    suiClient,
+    serverConfigs: serverObjectIds.map((id) => ({
+        objectId: id,
+        weight: 1,
+    })),
+    verifyKeyServers: false,
+  });
   
   // Walrus client setup
   const projectId = import.meta.env.VITE_REGISTRY_ID;
@@ -263,6 +282,7 @@ export function StatsPage() {
   const [selectedProjectForJob, setSelectedProjectForJob] = useState<number | null>(null);
   const [showJobApplicationDialog, setShowJobApplicationDialog] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null);
+  const [selectedProjectForApplication, setSelectedProjectForApplication] = useState<string | null>(null);
   const [showCompleteJobDialog, setShowCompleteJobDialog] = useState(false);
   const [selectedJobForCompletion, setSelectedJobForCompletion] = useState<JobRequest | null>(null);
   const [selectedProjectForCompletion, setSelectedProjectForCompletion] = useState<number | null>(null);
@@ -270,6 +290,10 @@ export function StatsPage() {
   const [selectedJobForHiring, setSelectedJobForHiring] = useState<JobRequest | null>(null);
   const [selectedProjectForHiring, setSelectedProjectForHiring] = useState<number | null>(null);
   const [projectMembers, setProjectMembers] = useState<{ [projectId: number]: TeamMember[] }>({});
+  const [encryptedJobs, setEncryptedJobs] = useState<{ [projectId: string]: any[] }>({});
+  const [loadingProjectJobs, setLoadingProjectJobs] = useState<{ [projectId: string]: boolean }>({});
+  const [decryptingJobId, setDecryptingJobId] = useState<string | null>(null);
+  const [expandedEncryptedJobs, setExpandedEncryptedJobs] = useState<{ [jobId: string]: boolean }>({});
   
   const [projectJobs, setProjectJobs] = useState<{ [projectId: number]: JobRequest[] }>({
     1: [
@@ -280,6 +304,8 @@ export function StatsPage() {
         budget: 5000,
         deadline: "2024-07-15",
         description: "We need a comprehensive security audit of our smart contracts before mainnet launch.",
+        location: "Remote",
+        numberOfPeopleToHire: 2,
         requiredSkills: ["Solidity", "Security Auditing", "Testing"],
         organizationContributions: ["Code Review Access", "Technical Documentation", "Testing Environment"],
         applicants: 12,
@@ -293,6 +319,8 @@ export function StatsPage() {
         budget: 3500,
         deadline: "2024-07-10",
         description: "Create a complete brand identity including logo, color palette, and design system.",
+        location: "Remote",
+        numberOfPeopleToHire: 1,
         requiredSkills: ["Branding", "UI/UX", "Figma"],
         organizationContributions: ["Brand Guidelines", "Design Assets", "Team Feedback"],
         applicants: 8,
@@ -307,6 +335,8 @@ export function StatsPage() {
         budget: 4000,
         deadline: "2024-08-01",
         description: "Plan and execute a comprehensive social media campaign for product launch.",
+        location: "Hybrid",
+        numberOfPeopleToHire: 3,
         requiredSkills: ["Social Media", "Content Strategy", "Analytics"],
         organizationContributions: ["Marketing Budget", "Content Calendar", "Analytics Access"],
         applicants: 10,
@@ -323,6 +353,8 @@ export function StatsPage() {
         budget: 2000,
         deadline: "2024-07-20",
         description: "Write comprehensive technical documentation for our API and SDK.",
+        location: "Remote",
+        numberOfPeopleToHire: 1,
         requiredSkills: ["Technical Writing", "API Documentation"],
         organizationContributions: ["API Access", "Code Examples", "Engineering Support"],
         applicants: 15,
@@ -662,6 +694,43 @@ export function StatsPage() {
     }
   };
 
+  // Fetch encrypted jobs for a specific project
+  const fetchEncryptedJobsForProject = async (projectBlockchainId: string) => {
+    try {
+      setLoadingProjectJobs(prev => ({ ...prev, [projectBlockchainId]: true }));
+      console.log('Fetching encrypted job requests for project:', projectBlockchainId);
+      
+      const registry = import.meta.env.VITE_REGISTRY_ID;
+      const project_struct = await client.getObject({
+        id: registry,
+        options: { showContent: true },
+      });
+      const projectContent: any = project_struct.data?.content;
+      const parentId = projectContent?.fields?.project_jobs?.fields?.id?.id;
+      const name = { type: '0x2::object::ID', value: projectBlockchainId };
+      const jobVault = await client.getDynamicFieldObject({ parentId, name });
+      const jobVaultContent: any = jobVault.data?.content;
+      const jobVaultId = jobVaultContent?.fields?.id?.id;
+      const jobVaultObj = await client.getObject({
+        id: jobVaultId,
+        options: { showContent: true },
+      });
+      const jobVaultObjContent: any = jobVaultObj.data?.content;
+      const jobs = jobVaultObjContent?.fields?.value?.fields?.jobs || [];
+      
+      console.log(`Fetched ${jobs.length} encrypted jobs for project ${projectBlockchainId}`);
+      
+      setEncryptedJobs(prev => ({
+        ...prev,
+        [projectBlockchainId]: jobs
+      }));
+    } catch (error) {
+      console.error(`Error fetching encrypted job requests for project ${projectBlockchainId}:`, error);
+    } finally {
+      setLoadingProjectJobs(prev => ({ ...prev, [projectBlockchainId]: false }));
+    }
+  };
+
   // Fetch projects when wallet is connected
   useEffect(() => {
     if (currentAccount) {
@@ -671,6 +740,17 @@ export function StatsPage() {
       setUserProjects([]);
     }
   }, [currentAccount]);
+  
+  // Fetch encrypted jobs for all projects when projects are loaded
+  useEffect(() => {
+    if (userProjects.length > 0) {
+      userProjects.forEach(project => {
+        if (project.blockchainId) {
+          fetchEncryptedJobsForProject(project.blockchainId);
+        }
+      });
+    }
+  }, [userProjects]);
 
   // Calculate portfolio totals
   const totalInvested = userProjects.reduce((sum, p) => sum + p.investment.amount, 0);
@@ -743,20 +823,172 @@ export function StatsPage() {
     toast.success("Job request removed successfully");
   };
 
-  const handleApplyClick = (job: JobRequest) => {
-    if (!isConnected) {
-      toast.error("Please connect your wallet to apply for this job");
-      return;
-    }
-    
-    setSelectedJob(job);
-    setShowJobApplicationDialog(true);
-  };
-
   const handleApplicationSubmit = (applicationData: any) => {
     console.log("Application submitted:", applicationData);
     toast.success("Application submitted successfully!");
     // In production, this would submit to backend/blockchain
+  };
+
+  const handleDecryptJob = async (encryptedJob: any, projectBlockchainId: string, projectId: number) => {
+    if (!currentAccount) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    const jobId = encryptedJob.fields?.id?.id;
+    setDecryptingJobId(jobId);
+    toast.loading("Decrypting job...");
+
+    try {
+      const registry = import.meta.env.VITE_REGISTRY_ID;
+      const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
+      console.log(encryptedJob.fields);
+      const jobDetails = encryptedJob.fields?.details;
+      console.log('Decrypting Job ID:', jobId);
+      console.log('Job Details (raw):', jobDetails);
+      
+      // Create session key
+      console.log("Creating session key...");
+      const sessionKey = await SessionKey.create({
+          address: currentAccount.address,
+          packageId: vendor,
+          ttlMin: 10,
+          suiClient: suiClient,
+      });
+
+      console.log("Signing session key...");
+      const message = sessionKey.getPersonalMessage();
+      const { signature } = await signPersonalMessage({ message });
+      sessionKey.setPersonalMessageSignature(signature);
+      console.log("Session key created");
+      
+      // Create the Transaction for seal_approve
+      const tx = new Transaction();
+      const idBytes = fromHex("0x1");
+      const moduleName = "ideation";
+      tx.moveCall({
+        target: `${vendor}::${moduleName}::seal_approve`,
+        arguments: [
+          tx.pure.vector("u8", idBytes),
+          tx.object(registry),
+          tx.object(projectBlockchainId),
+          tx.pure.id(jobId), 
+          tx.object(account_ns_reg)
+        ]
+      });
+      const txBytes = await tx.build({ client: suiClient, onlyTransactionKind: true });
+      
+      // Convert jobDetails to Uint8Array
+      let jobDetailsBytes: Uint8Array;
+      if (jobDetails instanceof Uint8Array) {
+        jobDetailsBytes = jobDetails;
+      } else if (Array.isArray(jobDetails)) {
+        jobDetailsBytes = new Uint8Array(jobDetails);
+      } else if (typeof jobDetails === 'string') {
+        const hexString = jobDetails.startsWith('0x') ? jobDetails.slice(2) : jobDetails;
+        jobDetailsBytes = fromHex(hexString);
+      } else {
+        throw new Error("Invalid jobDetails format");
+      }
+      
+      console.log("Decrypting job data...");
+      const decryptedBytes = await sealClient.decrypt({ 
+        data: jobDetailsBytes, 
+        sessionKey, 
+        txBytes 
+      });
+      
+      const decryptedJobDetails = new TextDecoder().decode(decryptedBytes);
+      console.log("Decrypted job details:", decryptedJobDetails);
+      
+      // Parse the decrypted job details
+      const parsedJob = JSON.parse(decryptedJobDetails);
+      console.log("Parsed job:", parsedJob);
+      
+      // Extract applicants from the blockchain encrypted job
+      const blockchainApplicants = Array.isArray(encryptedJob.fields?.applicants) 
+        ? encryptedJob.fields.applicants 
+        : [];
+      
+      // Convert to JobRequest format
+      const jobRequest: JobRequest = {
+        id: parsedJob.id || Date.now(),
+        title: parsedJob.title || '',
+        category: parsedJob.category || 'Development',
+        budget: parsedJob.budget || 0,
+        deadline: parsedJob.deadline || '',
+        description: parsedJob.description || '',
+        location: parsedJob.location || 'Remote',
+        numberOfPeopleToHire: parsedJob.numberOfPeopleToHire || 1,
+        requiredSkills: parsedJob.requiredSkills || [],
+        organizationContributions: parsedJob.organizationContributions || [],
+        applicants: blockchainApplicants.length || 0,
+        status: parsedJob.status || 'Open',
+        postedDate: parsedJob.postedDate || new Date().toISOString(),
+        projectId: projectBlockchainId, // Store the project ID
+        blockchainJobId: jobId, // Store the blockchain job ID for filtering
+      };
+      
+      // Store blockchain applicants as minimal application records
+      if (blockchainApplicants.length > 0) {
+        const blockchainApplications = blockchainApplicants.map((walletAddress: string, idx: number) => ({
+          id: `blockchain-app-${jobId}-${idx}`,
+          name: `Applicant ${idx + 1}`,
+          email: `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}@blockchain`,
+          portfolio: '',
+          coverLetter: 'Application submitted via blockchain. Full details encrypted.',
+          hourlyRate: '0',
+          availability: 'TBD',
+          walletAddress: walletAddress,
+          twitter: '',
+          linkedin: '',
+          appliedAt: new Date().toISOString(),
+          status: 'pending',
+        }));
+        
+        // Add blockchain applicants to the jobApplications state
+        setJobApplications(prev => ({
+          ...prev,
+          [jobRequest.id]: blockchainApplications,
+        }));
+        
+        console.log(`Added ${blockchainApplicants.length} blockchain applicants for job ${jobRequest.id}`);
+      }
+      
+      // Print all job details
+      console.log('\n=== DECRYPTED JOB DETAILS ===');
+      console.log('ID:', jobRequest.id);
+      console.log('Title:', jobRequest.title);
+      console.log('Category:', jobRequest.category);
+      console.log('Budget:', jobRequest.budget);
+      console.log('Deadline:', jobRequest.deadline);
+      console.log('Description:', jobRequest.description);
+      console.log('Location:', jobRequest.location);
+      console.log('Required Skills:', jobRequest.requiredSkills);
+      console.log('Organization Contributions:', jobRequest.organizationContributions);
+      console.log('Applicants:', jobRequest.applicants);
+      console.log('Applicant Wallet Addresses:', blockchainApplicants);
+      console.log('Status:', jobRequest.status);
+      console.log('Posted Date:', jobRequest.postedDate);
+      console.log('============================\n');
+      
+      // Add the decrypted job to state
+      setProjectJobs(prev => ({
+        ...prev,
+        [projectId]: [...(prev[projectId] || []), jobRequest],
+      }));
+      console.log("✓ Successfully decrypted job:", jobRequest.title);
+      
+      toast.dismiss();
+      toast.success(`Job "${jobRequest.title}" decrypted! 🔓`);
+      
+    } catch (error) {
+      console.error("Error decrypting job:", error);
+      toast.dismiss();
+      toast.error("Failed to decrypt job. Please try again.");
+    } finally {
+      setDecryptingJobId(null);
+    }
   };
 
   const checkCanPostJobs = (projectId: number): boolean => {
@@ -775,6 +1007,13 @@ export function StatsPage() {
 
   const toggleJobApplications = (jobId: number) => {
     setExpandedJobApplications(prev => ({
+      ...prev,
+      [jobId]: !prev[jobId]
+    }));
+  };
+
+  const toggleEncryptedJobApplicants = (jobId: string) => {
+    setExpandedEncryptedJobs(prev => ({
       ...prev,
       [jobId]: !prev[jobId]
     }));
@@ -1556,13 +1795,20 @@ export function StatsPage() {
                                 <div>
                                   <h4 className="text-lg text-foreground mb-1">Job Requests</h4>
                                   <p className="text-sm text-muted-foreground">
-                                    {(projectJobs[project.id] || []).length} job request(s)
+                                    {(encryptedJobs[project.blockchainId] || []).length} total · {(projectJobs[project.id] || []).length} posted
                                   </p>
-                                  {checkCanPostJobs(project.id) ? (
+                                  {loadingProjectJobs[project.blockchainId] && (
+                                    <p className="text-sm text-[#00E0FF] mt-1 flex items-center gap-2">
+                                      <div className="animate-spin h-3 w-3 border-2 border-[#00E0FF] border-t-transparent rounded-full" />
+                                      Loading jobs...
+                                    </p>
+                                  )}
+                                  {!loadingProjectJobs[project.blockchainId] && checkCanPostJobs(project.id) && (
                                     <p className="text-sm text-[#00FFA3] mt-1">
                                       You can post jobs for this project
                                     </p>
-                                  ) : (
+                                  )}
+                                  {!loadingProjectJobs[project.blockchainId] && !checkCanPostJobs(project.id) && (
                                     <p className="text-sm text-muted-foreground mt-1">
                                       View-only access
                                     </p>
@@ -1588,7 +1834,7 @@ export function StatsPage() {
 
                               {/* Jobs List */}
                             <div className="space-y-3">
-                              {(projectJobs[project.id] || []).length === 0 ? (
+                              {(projectJobs[project.id] || []).length === 0 && (encryptedJobs[project.blockchainId] || []).length === 0 && !loadingProjectJobs[project.blockchainId] ? (
                                 <Card className="p-8 bg-card/50 border-border text-center">
                                   <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                                   <p className="text-muted-foreground mb-4">No job requests yet</p>
@@ -1825,16 +2071,6 @@ export function StatsPage() {
                                                 )}
                                               </Button>
                                             )}
-                                            {(job.status === "Open" || job.status === "Hiring" || job.status === "In Progress") && (
-                                              <Button
-                                                size="sm"
-                                                onClick={() => handleApplyClick(job)}
-                                                className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                                              >
-                                                {job.status === "Open" ? "Apply Now" : "View Details"}
-                                                <ExternalLink className="w-3 h-3 ml-2" />
-                                              </Button>
-                                            )}
                                           </div>
                                         </div>
                                       </div>
@@ -1869,10 +2105,18 @@ export function StatsPage() {
                                     {isExpanded && applications.length > 0 && isConnected && (
                                       <div className="border-t border-border bg-card/50 p-5">
                                         <div className="mb-4">
-                                          <h6 className="text-foreground flex items-center gap-2 mb-2">
-                                            <Users className="w-4 h-4 text-[#00E0FF]" />
-                                            Applications ({applications.length})
-                                          </h6>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <h6 className="text-foreground flex items-center gap-2">
+                                              <Users className="w-4 h-4 text-[#00E0FF]" />
+                                              Applications ({applications.length})
+                                            </h6>
+                                            {applications.some(app => app.id.startsWith('blockchain-app-')) && (
+                                              <Badge className="bg-[#00E0FF]/10 text-[#00E0FF] border-[#00E0FF]/30 text-xs">
+                                                <Wallet className="w-3 h-3 mr-1" />
+                                                Blockchain Data
+                                              </Badge>
+                                            )}
+                                          </div>
                                           {job.status === "Hiring" && checkCanPostJobs(project.id) && (
                                             <p className="text-xs text-muted-foreground">
                                               Review applications and use "Manage Hiring" to add more members or start work
@@ -1903,6 +2147,11 @@ export function StatsPage() {
                                                           {getApplicationStatusIcon(app.status)}
                                                           <span className="ml-1 capitalize">{app.status}</span>
                                                         </Badge>
+                                                        {app.id.startsWith('blockchain-app-') && (
+                                                          <Badge className="bg-[#00E0FF]/10 text-[#00E0FF] border-[#00E0FF]/30 text-xs">
+                                                            On-chain
+                                                          </Badge>
+                                                        )}
                                                       </div>
                                                       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                                                         <span className="flex items-center gap-1">
@@ -2027,38 +2276,239 @@ export function StatsPage() {
                                   );
                                 })
                               )}
+                              
+                              {/* Show encrypted jobs */}
+                              {(encryptedJobs[project.blockchainId] || []).map((encJob, idx) => {
+                                const jobId = encJob.fields?.id?.id;
+                                const isDecrypted = (projectJobs[project.id] || []).some(j => j.blockchainJobId === jobId);
+                                const isDecrypting = decryptingJobId === jobId;
+                                
+                                // Skip if already decrypted
+                                if (isDecrypted) return null;
+                                
+                                // Parse non-encrypted metadata
+                                const fields = encJob.fields || {};
+                                const budget = Number(fields.prize_pool || 0) / 1_000_000; // Convert from micro-USDC to USDC
+                                const numWorkers = Number(fields.num_workers || 1);
+                                const categoryNum = Number(fields.category || 0);
+                                const categoryMap: { [key: number]: string } = {
+                                  0: "Development",
+                                  1: "Design",
+                                  2: "Content",
+                                  3: "Marketing",
+                                };
+                                const category = categoryMap[categoryNum] || "Development";
+                                const stateVariant = fields.state?.variant || "Open";
+                                const status = stateVariant === "Hiring" ? "Hiring" : "Open";
+                                const applicantsList = Array.isArray(fields.applicants) ? fields.applicants : [];
+                                const applicantsCount = applicantsList.length;
+                                const selectedList = Array.isArray(fields.selected) ? fields.selected : [];
+                                const selectedCount = selectedList.length;
+                                const isExpanded = expandedEncryptedJobs[jobId] || false;
+                                
+                                return (
+                                  <Card
+                                    key={jobId || idx}
+                                    className="overflow-hidden bg-card/50 border-[#FF6B00]/30 backdrop-blur-sm hover:border-[#FF6B00]/50 transition-all"
+                                  >
+                                    <div className="p-5 space-y-4">
+                                      {/* Job Header */}
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-2">
+                                            <Lock className="w-4 h-4 text-[#FF6B00]" />
+                                            <h5 className="text-lg text-foreground">Encrypted Job Request #{idx + 1}</h5>
+                                            <Badge className={getJobStatusColor(status)}>
+                                              {status}
+                                            </Badge>
+                                            <Badge className="bg-[#FF6B00]/20 text-[#FF6B00] border-[#FF6B00]/30">
+                                              🔒 Locked
+                                            </Badge>
+                                          </div>
+                                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                            <div className="flex items-center gap-1">
+                                              {getCategoryIcon(category)}
+                                              <span>{category}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <Users className="w-3 h-3" />
+                                              <span>{applicantsCount} applicant{applicantsCount !== 1 ? 's' : ''}</span>
+                                            </div>
+                                            {selectedCount > 0 && (
+                                              <div className="flex items-center gap-1">
+                                                <UserCheck className="w-3 h-3" />
+                                                <span>{selectedCount} hired</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Encrypted Notice */}
+                                      <div className="p-3 bg-[#FF6B00]/5 border border-[#FF6B00]/20 rounded-lg">
+                                        <p className="text-sm text-muted-foreground">
+                                          🔒 Job title, description, and other details are encrypted. Click "Decrypt" to view full information.
+                                        </p>
+                                      </div>
+
+                                      {/* Public Metadata and Action Buttons */}
+                                      <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                          <div className="text-xs text-muted-foreground mb-1">Budget</div>
+                                          <div className="text-lg text-[#00E0FF]">
+                                            ${budget.toLocaleString()}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-xs text-muted-foreground mb-1">Workers Needed</div>
+                                          <div className="text-lg text-foreground">
+                                            {numWorkers} {numWorkers === 1 ? 'person' : 'people'}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Action Buttons */}
+                                      <div className="flex gap-2">
+                                        {applicantsCount > 0 && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => toggleEncryptedJobApplicants(jobId)}
+                                            className="flex-1 border-border text-foreground hover:bg-card"
+                                          >
+                                            {isExpanded ? (
+                                              <>
+                                                <ChevronUp className="w-3 h-3 mr-1" />
+                                                Hide Applicants
+                                              </>
+                                            ) : (
+                                              <>
+                                                <ChevronDown className="w-3 h-3 mr-1" />
+                                                View {applicantsCount} Applicant{applicantsCount !== 1 ? 's' : ''}
+                                              </>
+                                            )}
+                                          </Button>
+                                        )}
+                                        <Button
+                                          onClick={() => handleDecryptJob(encJob, project.blockchainId, project.id)}
+                                          disabled={isDecrypting}
+                                          className={`${applicantsCount > 0 ? 'flex-1' : 'w-full'} bg-gradient-to-r from-[#FF6B00] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]`}
+                                        >
+                                          {isDecrypting ? (
+                                            <>
+                                              <Lock className="w-4 h-4 mr-2 animate-pulse" />
+                                              Decrypting...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Lock className="w-4 h-4 mr-2" />
+                                              Decrypt
+                                            </>
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </div>
+
+                                    {/* Applicants List */}
+                                    {isExpanded && applicantsCount > 0 && (
+                                      <div className="border-t border-border bg-card/50 p-5">
+                                        <div className="mb-4">
+                                          <h6 className="text-foreground flex items-center gap-2 mb-2">
+                                            <Users className="w-4 h-4 text-[#FF6B00]" />
+                                            Applicants ({applicantsCount})
+                                          </h6>
+                                          <p className="text-xs text-muted-foreground">
+                                            Wallet addresses of applicants. Decrypt the job to see full application details.
+                                          </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                          {applicantsList.map((applicantAddress: string, applicantIdx: number) => (
+                                            <div key={applicantIdx} className="flex items-center gap-3 p-3 bg-card/80 border border-border rounded-lg">
+                                              <Avatar className="w-10 h-10 border-2 border-[#FF6B00]/30">
+                                                <AvatarFallback className="bg-gradient-to-br from-[#FF6B00] to-[#C04BFF] text-[#0D0E10]">
+                                                  {applicantAddress.slice(2, 4).toUpperCase()}
+                                                </AvatarFallback>
+                                              </Avatar>
+                                              <div className="flex-1">
+                                                <div className="text-sm text-foreground font-mono">
+                                                  {applicantAddress.slice(0, 6)}...{applicantAddress.slice(-4)}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">
+                                                  Applicant #{applicantIdx + 1}
+                                                </div>
+                                              </div>
+                                              <Badge className="bg-[#FF6B00]/20 text-[#FF6B00] border-[#FF6B00]/30 text-xs">
+                                                {selectedList.includes(applicantAddress) ? "Hired" : "Pending"}
+                                              </Badge>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </Card>
+                                );
+                              })}
                             </div>
 
                             {/* Jobs Stats */}
-                            {(projectJobs[project.id] || []).length > 0 && (
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <Card className="p-4 bg-card/50 border-border">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <CheckCircle2 className="w-5 h-5 text-[#00FFA3]" />
-                                    <div className="text-sm text-muted-foreground">Open Jobs</div>
+                            {((projectJobs[project.id] || []).length > 0 || (encryptedJobs[project.blockchainId] || []).length > 0) && (
+                              <div className="space-y-4">
+                                {/* Blockchain Jobs Summary */}
+                                {(encryptedJobs[project.blockchainId] || []).length > 0 && (
+                                  <Card className="p-4 bg-gradient-to-r from-[#00E0FF]/10 to-[#C04BFF]/10 border-[#00E0FF]/30">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-[#00E0FF]/20 rounded-lg">
+                                          <Briefcase className="w-5 h-5 text-[#00E0FF]" />
+                                        </div>
+                                        <div>
+                                          <p className="text-foreground font-medium">
+                                            {(encryptedJobs[project.blockchainId] || []).length} Total Job{(encryptedJobs[project.blockchainId] || []).length !== 1 ? 's' : ''} on Blockchain
+                                          </p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {(projectJobs[project.id] || []).length} posted by you
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <Badge className="bg-[#00E0FF]/20 text-[#00E0FF] border-[#00E0FF]/30">
+                                        Live Data
+                                      </Badge>
+                                    </div>
+                                  </Card>
+                                )}
+                                
+                                {/* Your Jobs Stats */}
+                                {(projectJobs[project.id] || []).length > 0 && (
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <Card className="p-4 bg-card/50 border-border">
+                                      <div className="flex items-center gap-3 mb-2">
+                                        <CheckCircle2 className="w-5 h-5 text-[#00FFA3]" />
+                                        <div className="text-sm text-muted-foreground">Your Open Jobs</div>
+                                      </div>
+                                      <div className="text-2xl text-foreground">
+                                        {(projectJobs[project.id] || []).filter(j => j.status === "Open").length}
+                                      </div>
+                                    </Card>
+                                    <Card className="p-4 bg-card/50 border-border">
+                                      <div className="flex items-center gap-3 mb-2">
+                                        <DollarSign className="w-5 h-5 text-[#00E0FF]" />
+                                        <div className="text-sm text-muted-foreground">Your Total Budget</div>
+                                      </div>
+                                      <div className="text-2xl text-foreground">
+                                        ${(projectJobs[project.id] || []).reduce((sum, j) => sum + j.budget, 0).toLocaleString()}
+                                      </div>
+                                    </Card>
+                                    <Card className="p-4 bg-card/50 border-border">
+                                      <div className="flex items-center gap-3 mb-2">
+                                        <Users className="w-5 h-5 text-[#C04BFF]" />
+                                        <div className="text-sm text-muted-foreground">Total Applicants</div>
+                                      </div>
+                                      <div className="text-2xl text-foreground">
+                                        {(projectJobs[project.id] || []).reduce((sum, j) => sum + (jobApplications[j.id] || []).length, 0)}
+                                      </div>
+                                    </Card>
                                   </div>
-                                  <div className="text-2xl text-foreground">
-                                    {(projectJobs[project.id] || []).filter(j => j.status === "Open").length}
-                                  </div>
-                                </Card>
-                                <Card className="p-4 bg-card/50 border-border">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <DollarSign className="w-5 h-5 text-[#00E0FF]" />
-                                    <div className="text-sm text-muted-foreground">Total Budget</div>
-                                  </div>
-                                  <div className="text-2xl text-foreground">
-                                    ${(projectJobs[project.id] || []).reduce((sum, j) => sum + j.budget, 0).toLocaleString()}
-                                  </div>
-                                </Card>
-                                <Card className="p-4 bg-card/50 border-border">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <Users className="w-5 h-5 text-[#C04BFF]" />
-                                    <div className="text-sm text-muted-foreground">Total Applicants</div>
-                                  </div>
-                                  <div className="text-2xl text-foreground">
-                                    {(projectJobs[project.id] || []).reduce((sum, j) => sum + (jobApplications[j.id] || []).length, 0)}
-                                  </div>
-                                </Card>
+                                )}
                               </div>
                             )}
                             </div>
@@ -2122,6 +2572,7 @@ export function StatsPage() {
         open={showJobApplicationDialog}
         onOpenChange={setShowJobApplicationDialog}
         job={selectedJob}
+        projectId={selectedProjectForApplication || undefined}
         onSubmit={handleApplicationSubmit}
       />
 

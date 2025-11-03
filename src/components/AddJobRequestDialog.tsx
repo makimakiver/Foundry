@@ -32,7 +32,8 @@ import {
   AlertCircle,
   Plus,
   X,
-  MapPin
+  MapPin,
+  Users
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { useCurrentAccount, useSignAndExecuteTransaction, useSignPersonalMessage } from "@mysten/dapp-kit";
@@ -61,7 +62,10 @@ export interface JobRequest {
   applicants: number;
   status: "Open" | "Hiring" | "In Progress" | "Completed" | "Closed";
   postedDate: string;
+  numberOfPeopleToHire: number;
   hiredMembers?: string[]; // Array of applicant IDs
+  projectId?: string; // Blockchain project object ID
+  blockchainJobId?: string; // Blockchain job ID for filtering encrypted vs decrypted jobs
 }
 
 const categories = [
@@ -91,6 +95,7 @@ export function AddJobRequestDialog({
   const [deadline, setDeadline] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
+  const [numberOfPeopleToHire, setNumberOfPeopleToHire] = useState("1");
   const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
   const [skillAmounts, setSkillAmounts] = useState<{ [skill: string]: number }>({});
   const [newSkill, setNewSkill] = useState("");
@@ -200,6 +205,12 @@ export function AddJobRequestDialog({
       return;
     }
     
+    const numberOfPeopleNum = parseInt(numberOfPeopleToHire);
+    if (!numberOfPeopleToHire || isNaN(numberOfPeopleNum) || numberOfPeopleNum <= 0) {
+      toast.error("Please enter a valid number of people to hire");
+      return;
+    }
+    
     // if (requiredSkills.length === 0) {
     //   toast.error("Please add at least one required skill");
     //   return;
@@ -235,6 +246,7 @@ export function AddJobRequestDialog({
       deadline,
       description: description.trim(),
       location: location.trim(),
+      numberOfPeopleToHire: numberOfPeopleNum,
       requiredSkills,
       organizationContributions,
       applicants: 0,
@@ -325,6 +337,7 @@ export function AddJobRequestDialog({
           tx.pure.address(ownerAddress),
           tx.pure.u64(categoryNum),
           coin,
+          tx.pure.u64(numberOfPeopleNum),
         ],
       });
       
@@ -344,6 +357,7 @@ export function AddJobRequestDialog({
       setDeadline("");
       setDescription("");
       setLocation("");
+      setNumberOfPeopleToHire("1");
       setRequiredSkills([]);
       setSkillAmounts({});
       setNewSkill("");
@@ -525,6 +539,27 @@ export function AddJobRequestDialog({
             </div>
           </div>
 
+          {/* Number of People to Hire */}
+          <div>
+            <Label htmlFor="numberOfPeopleToHire" className="text-[#E8E9EB] mb-2 block">
+              Number of People to Hire *
+            </Label>
+            <div className="relative">
+              <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#A0A2A8]" />
+              <Input
+                id="numberOfPeopleToHire"
+                type="text"
+                placeholder="e.g., 1, 2, 5"
+                value={numberOfPeopleToHire}
+                onChange={(e) => setNumberOfPeopleToHire(e.target.value)}
+                className="pl-10 bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] placeholder:text-[#A0A2A8]"
+              />
+            </div>
+            <p className="text-sm text-[#A0A2A8] mt-1">
+              Specify how many people you want to hire for this position (numeric value)
+            </p>
+          </div>
+
           {/* Required Skills */}
           <div>
             <Label className="text-[#E8E9EB] mb-2 block">
@@ -704,6 +739,7 @@ export function AddJobRequestDialog({
                     <div className="text-[#A0A2A8]">
                       Budget: ${parseFloat(budget).toLocaleString()} • Deadline: {new Date(deadline).toLocaleDateString()}
                       {location && ` • ${location}`}
+                      {numberOfPeopleToHire && !isNaN(parseInt(numberOfPeopleToHire)) && ` • Hiring: ${numberOfPeopleToHire} ${parseInt(numberOfPeopleToHire) === 1 ? 'person' : 'people'}`}
                     </div>
                   </div>
                 </div>
@@ -723,7 +759,7 @@ export function AddJobRequestDialog({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || !title || !category || !budget || !deadline || !description || !location }
+              disabled={isSubmitting || !title || !category || !budget || !deadline || !description || !location || !numberOfPeopleToHire || isNaN(parseInt(numberOfPeopleToHire)) || parseInt(numberOfPeopleToHire) <= 0}
               className="flex-1 bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] disabled:opacity-50"
             >
               <Briefcase className="w-4 h-4 mr-2" />

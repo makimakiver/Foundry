@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -7,7 +7,7 @@ import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { Card } from "./ui/card";
 import { Separator } from "./ui/separator";
-import { useCurrentAccount } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import {
   Briefcase,
   DollarSign,
@@ -25,8 +25,13 @@ import {
   Linkedin,
   Github,
   MessageCircle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
+import { WalrusFile, walrus } from "@mysten/walrus";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { getFullnodeUrl } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
 
 export interface JobRequest {
   id: number;
@@ -41,6 +46,8 @@ export interface JobRequest {
   applicants: number;
   postedDate?: string;
   projectName?: string;
+  projectId?: string; // Blockchain project object ID
+  blockchainJobId?: string; // Blockchain job object ID
   location?: string;
   commitment?: string;
 }
@@ -49,6 +56,7 @@ interface JobApplicationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   job: JobRequest | null;
+  projectId?: string; // Blockchain project object ID
   onSubmit?: (application: ApplicationData) => void;
 }
 
@@ -64,18 +72,42 @@ export interface ApplicationData {
   linkedin: string; // Required: LinkedIn profile
   github?: string;
   discord?: string;
+  resume?: File | null;
 }
 
 export function JobApplicationDialog({
   open,
   onOpenChange,
   job,
+  projectId: propProjectId,
   onSubmit,
 }: JobApplicationDialogProps) {
   const account = useCurrentAccount();
   const isConnected = !!account;
   const walletAddress = account?.address || "";
+  const suiClient = useSuiClient();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const vendor = import.meta.env.VITE_PACKAGE_ID;
+  const registry = import.meta.env.VITE_REGISTRY_ID;
+  
+  // Get project ID from job or from prop
+  const projectId = job?.projectId || propProjectId;
+  const walrusClient = useMemo(() => new SuiJsonRpcClient({
+    url: getFullnodeUrl('testnet'),
+    network: 'testnet',
+  }).$extend(
+    walrus({
+      uploadRelay: {
+        host: 'https://upload-relay.testnet.walrus.space',
+        sendTip: { max: 1_000 },
+      },
+      wasmUrl: 'https://unpkg.com/@mysten/walrus-wasm@latest/web/walrus_wasm_bg.wasm',
+    })
+  ), []);
+  
   const [step, setStep] = useState<"details" | "application">("details");
+  const [resume, setResume] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [formData, setFormData] = useState<ApplicationData>({
     name: "",
     email: "",
@@ -88,6 +120,7 @@ export function JobApplicationDialog({
     linkedin: "",
     github: "",
     discord: "",
+    resume: null,
   });
 
   const getCategoryIcon = (category: string) => {
@@ -118,7 +151,7 @@ export function JobApplicationDialog({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isConnected) {
@@ -143,43 +176,158 @@ export function JobApplicationDialog({
       return;
     }
 
-    const applicationData = {
-      ...formData,
-      walletAddress: walletAddress,
-    };
+    try {
+      let resumeBlobId: string | null = null;
+      
+      // Step 2: Prepare application metadata (without the actual resume file)
+      const applicationMetadata = {
+        ...formData,
+        walletAddress: walletAddress,
+      };
+      // Step 3: Upload application metadata to Walrus
+      toast.loading('Uploading application metadata to Walrus...');
+      
+      const metadataJson = JSON.stringify(applicationMetadata);
+      console.log('Application metadata:', metadataJson);
+      const metadataData = new TextEncoder().encode(metadataJson);
+      
+      const metadataFile = [
+        WalrusFile.from({
+          contents: new Uint8Array(metadataData),
+          identifier: 'candidate-application-metadata.json',
+        }),
+      ];
 
-    if (onSubmit) {
-      onSubmit(applicationData);
+      if (resume) {
+        const resumeData = await resume.arrayBuffer();
+        metadataFile.push(
+          WalrusFile.from({
+            contents: new Uint8Array(resumeData),
+            identifier: `resume.pdf`,
+          }),
+        );
+      }
+
+      const metadataFlow = walrusClient.walrus.writeFilesFlow({
+        files: metadataFile,
+      });
+      
+      await metadataFlow.encode();
+      
+      const metadataRegisterTx = metadataFlow.register({
+        epochs: 3,
+        owner: account?.address || '',
+        deletable: true,
+      });
+      
+      const { digest: metadataDigest } = await signAndExecuteTransaction({ 
+        transaction: metadataRegisterTx 
+      });
+      
+      await metadataFlow.upload({ digest: metadataDigest });
+      
+      const metadataInfo = await suiClient.getTransactionBlock({
+        digest: metadataDigest, 
+        options: { showObjectChanges: true }
+      });
+      
+      const metadataBlobChange = metadataInfo?.objectChanges?.find(
+        (o: any) =>
+          o.type === 'created' &&
+          ((o.objectType ?? o.object_type) || '').toLowerCase().endsWith('::blob::blob')
+      ) ?? null;
+      
+      const metadataBlobId = (metadataBlobChange as any)?.objectId;
+      
+      if (!metadataBlobId) {
+        throw new Error('Failed to upload application metadata to Walrus');
+      }
+      
+      console.log('Metadata uploaded successfully. Blob ID:', metadataBlobId);
+      console.log('Job ID (frontend):', job?.id);
+      console.log('Job ID (blockchain):', job?.blockchainJobId);
+      console.log('Project ID:', projectId);
+      console.log('Applicant Address:', account?.address);
+      
+      // Submit application to blockchain
+      const blockchainJobId = job?.blockchainJobId;
+      if (projectId && blockchainJobId) {
+        try {
+          toast.loading('Submitting application to blockchain...');
+          const tx = new Transaction();
+          tx.moveCall({
+            target: `${vendor}::ideation::submit_application`,
+            arguments: [
+              tx.object(registry),
+              tx.object(projectId),                     // Project object ID
+              tx.object(blockchainJobId),               // Blockchain job object ID
+              tx.object(metadataBlobId),                // Application metadata blob ID
+              tx.object('0x6'),                         // Clock object
+            ]
+          });
+          
+          await signAndExecuteTransaction({ transaction: tx });
+          console.log('Application submitted to blockchain successfully');
+        } catch (blockchainError) {
+          console.error('Error submitting to blockchain:', blockchainError);
+          toast.dismiss();
+          // Don't fail the whole submission if blockchain part fails
+          toast.warning('Application uploaded but blockchain submission had issues');
+        }
+      } else {
+        console.warn('Missing project ID or blockchain job ID, skipping blockchain submission');
+        if (!blockchainJobId) {
+          console.error('Job is missing blockchainJobId property. Make sure it is set when the job is created/fetched.');
+        }
+      }
+      toast.dismiss();
+      toast.success('Application submitted successfully! 🎉');
+      
+      // Notify parent component
+      if (onSubmit) {
+        onSubmit(applicationMetadata);
+      }
+      
+      // Count social links added
+      const socialLinksCount = [
+        formData.twitter,
+        formData.linkedin,
+        formData.github,
+        formData.discord,
+      ].filter(Boolean).length;
+
+      const successDetails = resume 
+        ? `Application with resume and ${socialLinksCount} social profile${socialLinksCount > 1 ? "s" : ""} submitted!`
+        : `Application with ${socialLinksCount} social profile${socialLinksCount > 1 ? "s" : ""} submitted!`;
+
+      console.log(successDetails);
+      console.log('Resume Blob ID:', resumeBlobId);
+      console.log('Metadata Blob ID:', metadataBlobId);
+      
+      // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        portfolio: "",
+        coverLetter: "",
+        hourlyRate: "",
+        availability: "",
+        walletAddress: walletAddress,
+        twitter: "",
+        linkedin: "",
+        github: "",
+        discord: "",
+        resume: null,
+      });
+      setResume(null);
+      setStep("details");
+      onOpenChange(false);
+      
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      toast.dismiss();
+      toast.error('Failed to submit application. Please try again.');
     }
-
-    // Count social links added
-    const socialLinksCount = [
-      formData.twitter,
-      formData.linkedin,
-      formData.github,
-      formData.discord,
-    ].filter(Boolean).length;
-
-    const successMessage = `Application submitted successfully with ${socialLinksCount} social profile${socialLinksCount > 1 ? "s" : ""}!`;
-
-    toast.success(successMessage);
-    
-    // Reset form
-    setFormData({
-      name: "",
-      email: "",
-      portfolio: "",
-      coverLetter: "",
-      hourlyRate: "",
-      availability: "",
-      walletAddress: walletAddress,
-      twitter: "",
-      linkedin: "",
-      github: "",
-      discord: "",
-    });
-    setStep("details");
-    onOpenChange(false);
   };
 
   const handleInputChange = (
@@ -189,6 +337,64 @@ export function JobApplicationDialog({
       ...formData,
       [e.target.name]: e.target.value,
     });
+  };
+
+  const validateFile = (file: File): boolean => {
+    const validTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    if (!validTypes.includes(file.type)) {
+      toast.error("Please upload a PDF, DOC, or DOCX file");
+      return false;
+    }
+
+    if (file.size > maxSize) {
+      toast.error("File size must be less than 5MB");
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && validateFile(file)) {
+      setResume(file);
+      setFormData({ ...formData, resume: file });
+      toast.success(`Resume "${file.name}" uploaded successfully`);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file && validateFile(file)) {
+      setResume(file);
+      setFormData({ ...formData, resume: file });
+      toast.success(`Resume "${file.name}" uploaded successfully`);
+    }
+  };
+
+  const handleRemoveResume = () => {
+    setResume(null);
+    setFormData({ ...formData, resume: null });
+    toast.info("Resume removed");
   };
 
   const handleDialogClose = (open: boolean) => {
@@ -204,7 +410,8 @@ export function JobApplicationDialog({
         formData.twitter ||
         formData.linkedin ||
         formData.github ||
-        formData.discord;
+        formData.discord ||
+        resume;
 
       if (hasFilledData) {
         const confirmed = window.confirm(
@@ -227,7 +434,9 @@ export function JobApplicationDialog({
         linkedin: "",
         github: "",
         discord: "",
+        resume: null,
       });
+      setResume(null);
     }
     onOpenChange(open);
   };
@@ -380,6 +589,10 @@ export function JobApplicationDialog({
                       </p>
                       <p className="flex items-center gap-2">
                         <CheckCircle2 className="w-3 h-3 text-[#00FFA3]" />
+                        Cover Letter (minimum 100 characters)
+                      </p>
+                      <p className="flex items-center gap-2">
+                        <CheckCircle2 className="w-3 h-3 text-[#00FFA3]" />
                         LinkedIn Profile URL
                       </p>
                       <p className="flex items-center gap-2">
@@ -445,7 +658,7 @@ export function JobApplicationDialog({
                   </p>
                   <p className="text-xs text-[#FF6B00] mt-2 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
-                    LinkedIn and X (Twitter) profiles required
+                    Cover letter (100+ chars), LinkedIn and X (Twitter) required
                   </p>
                 </div>
               </div>
@@ -501,6 +714,48 @@ export function JobApplicationDialog({
                   placeholder="https://yourportfolio.com"
                   className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] mt-2"
                 />
+              </div>
+            </div>
+
+            {/* Cover Letter */}
+            <div className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="text-lg text-[#E8E9EB]">Cover Letter *</h4>
+                  <p className="text-sm text-[#A0A2A8] mt-1">
+                    Tell us why you're a great fit for this position (minimum 100 characters)
+                  </p>
+                </div>
+                <Badge className="bg-[#FF6B00]/10 text-[#FF6B00] border-[#FF6B00]/30 text-xs">
+                  Required
+                </Badge>
+              </div>
+              
+              <div>
+                <Textarea
+                  id="coverLetter"
+                  name="coverLetter"
+                  value={formData.coverLetter}
+                  onChange={handleInputChange}
+                  rows={6}
+                  placeholder="I am excited to apply for this position because..."
+                  className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] resize-none"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <p className={`text-xs ${
+                    formData.coverLetter.length < 100 
+                      ? 'text-[#FF6B00]' 
+                      : 'text-[#00FFA3]'
+                  }`}>
+                    {formData.coverLetter.length < 100 
+                      ? `${100 - formData.coverLetter.length} more characters needed`
+                      : `✓ ${formData.coverLetter.length} characters`
+                    }
+                  </p>
+                  <p className="text-xs text-[#A0A2A8]">
+                    {formData.coverLetter.length} / 1000
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -611,79 +866,71 @@ export function JobApplicationDialog({
               </div>
             </div>
 
-            {/* Application Details */}
-            <div className="space-y-4">
-              <h4 className="text-lg text-[#E8E9EB]">Application Details</h4>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="hourlyRate" className="text-[#E8E9EB]">
-                    Your Hourly Rate ($) *
-                  </Label>
-                  <Input
-                    id="hourlyRate"
-                    name="hourlyRate"
-                    type="number"
-                    value={formData.hourlyRate}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="50"
-                    className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] mt-2"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="availability" className="text-[#E8E9EB]">
-                    Availability *
-                  </Label>
-                  <Input
-                    id="availability"
-                    name="availability"
-                    value={formData.availability}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="Full-time / Part-time / 20hrs/week"
-                    className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] mt-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="coverLetter" className="text-[#E8E9EB]">
-                  Cover Letter *
-                </Label>
-                <Textarea
-                  id="coverLetter"
-                  name="coverLetter"
-                  value={formData.coverLetter}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="Tell us why you're the perfect fit for this position..."
-                  rows={6}
-                  className="bg-[#0D0E10] border-[#E8E9EB]/20 text-[#E8E9EB] mt-2 resize-none"
-                />
-                <p className="text-sm text-[#A0A2A8] mt-2">
-                  Minimum 100 characters ({formData.coverLetter.length}/100)
-                </p>
-              </div>
-            </div>
-
+  
             {/* Resume Upload (Optional) */}
             <div>
               <Label htmlFor="resume" className="text-[#E8E9EB]">
                 Resume/CV (Optional)
               </Label>
-              <Card className="p-6 bg-[#0D0E10]/50 border-[#E8E9EB]/10 border-dashed mt-2 cursor-pointer hover:border-[#00E0FF]/30 transition-all">
-                <div className="text-center">
-                  <Upload className="w-8 h-8 text-[#A0A2A8] mx-auto mb-2" />
-                  <p className="text-[#A0A2A8] text-sm">
-                    Click to upload or drag and drop
-                  </p>
-                  <p className="text-[#A0A2A8] text-xs mt-1">
-                    PDF, DOC, DOCX (Max 5MB)
-                  </p>
-                </div>
-              </Card>
+              <input
+                id="resume"
+                type="file"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              {!resume ? (
+                <Card 
+                  className={`p-6 bg-[#0D0E10]/50 border-dashed mt-2 cursor-pointer transition-all ${
+                    isDragging 
+                      ? 'border-[#00E0FF] bg-[#00E0FF]/5' 
+                      : 'border-[#E8E9EB]/10 hover:border-[#00E0FF]/30'
+                  }`}
+                  onClick={() => document.getElementById('resume')?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  <div className="text-center">
+                    <Upload className={`w-8 h-8 mx-auto mb-2 ${
+                      isDragging ? 'text-[#00E0FF]' : 'text-[#A0A2A8]'
+                    }`} />
+                    <p className={`text-sm ${
+                      isDragging ? 'text-[#00E0FF]' : 'text-[#A0A2A8]'
+                    }`}>
+                      {isDragging ? 'Drop file here' : 'Click to upload or drag and drop'}
+                    </p>
+                    <p className="text-[#A0A2A8] text-xs mt-1">
+                      PDF, DOC, DOCX (Max 5MB)
+                    </p>
+                  </div>
+                </Card>
+              ) : (
+                <Card className="p-4 bg-[#0D0E10]/50 border-[#00E0FF]/30 mt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-[#00E0FF]/10 rounded">
+                        <FileText className="w-5 h-5 text-[#00E0FF]" />
+                      </div>
+                      <div>
+                        <p className="text-[#E8E9EB] text-sm">{resume.name}</p>
+                        <p className="text-[#A0A2A8] text-xs">
+                          {(resume.size / 1024).toFixed(2)} KB
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleRemoveResume}
+                      className="text-[#FF6B00] hover:text-[#FF6B00] hover:bg-[#FF6B00]/10"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </Card>
+              )}
             </div>
 
             {/* Application Summary */}
@@ -700,6 +947,7 @@ export function JobApplicationDialog({
                     Full Name {formData.name && `✓`}
                   </span>
                 </div>
+        
                 <div className="flex items-center gap-2">
                   {formData.linkedin ? (
                     <CheckCircle2 className="w-4 h-4 text-[#00FFA3]" />
@@ -757,7 +1005,6 @@ export function JobApplicationDialog({
               <Button
                 type="submit"
                 disabled={
-                  formData.coverLetter.length < 100 || 
                   !formData.twitter || 
                   !formData.linkedin
                 }
@@ -769,7 +1016,10 @@ export function JobApplicationDialog({
             </div>
             {(!formData.twitter || !formData.linkedin) && (
               <p className="text-sm text-[#FF6B00] text-center -mt-2">
-                Please provide your LinkedIn and X (Twitter) profiles to submit
+                {formData.coverLetter.length < 100 
+                  ? `Cover letter needs ${100 - formData.coverLetter.length} more characters`
+                  : "Please provide your LinkedIn and X (Twitter) profiles to submit"
+                }
               </p>
             )}
           </form>

@@ -234,12 +234,15 @@ module vendor3::ideation {
     }
 
     // submitting the application to job request
-    entry fun submit_application(self: &mut Job, resume: Blob, details: Blob, clock: &Clock, ctx: &mut TxContext){
-        assert!(!self.applicants.contains(&ctx.sender()), 0);
-        assert!(!self.applications.contains(ctx.sender()), 1);
-        let application = contribution::mint_application(resume, details, clock, ctx);
-        self.applications.add(ctx.sender(), application);
-        self.applicants.push_back(ctx.sender());
+    entry fun submit_application(aggregator: &mut Registry, project: &Project, job_id: ID, details: Blob, clock: &Clock, ctx: &mut TxContext){
+        let mut vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
+        let job_idx = find_job_index(job_id, vault);
+        let job = vault.jobs.borrow_mut(job_idx);
+        assert!(!job.applicants.contains(&ctx.sender()), 0);
+        assert!(!job.applications.contains(ctx.sender()), 1);
+        let application = contribution::mint_application(details, clock, ctx);
+        job.applications.add(ctx.sender(), application);
+        job.applicants.push_back(ctx.sender());
     }
 
     // add target to the execution team

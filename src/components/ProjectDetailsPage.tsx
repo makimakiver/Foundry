@@ -151,7 +151,7 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
           let imageDirectUrl = project.image; // For shareable links
           
           console.log('Blob ID:', blobId);
-          const imageUrls = await walrusImageUrl(blobId, metadataJson.imageFileType, metadataJson.imageFileName);
+          const imageUrls = await walrusImageUrl(blobId, metadataJson.imageFileName);
           console.log('Image URLs:', imageUrls.blobUrl);
           
           imageUrl = imageUrls.blobUrl;
@@ -442,11 +442,14 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
         deadline: parsedJob.deadline || '',
         description: parsedJob.description || '',
         location: parsedJob.location || 'Remote',
+        numberOfPeopleToHire: parsedJob.numberOfPeopleToHire || 1,
         requiredSkills: parsedJob.requiredSkills || [],
         organizationContributions: parsedJob.organizationContributions || [],
         applicants: parsedJob.applicants || 0,
         status: parsedJob.status || 'Open',
         postedDate: parsedJob.postedDate || new Date().toISOString(),
+        projectId: project.id, // Store the project ID
+        blockchainJobId: jobId, // Store the blockchain job ID for filtering
       };
       
       // Add the decrypted job to state
@@ -931,14 +934,14 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                     </p>
                   </div>
                   {currentAccount && checkCanPostJobs() && (
-                    <Button
-                      onClick={handleAddJob}
-                      size="sm"
-                      className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                    >
-                      <Briefcase className="w-4 h-4 mr-2" />
-                      Post Job
-                    </Button>
+                        <Button
+                          onClick={handleAddJob}
+                          size="sm"
+                          className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                        >
+                          <Briefcase className="w-4 h-4 mr-2" />
+                          Post Job
+                        </Button>
                   )}
                 </div>
                 <div className="space-y-3">
@@ -946,19 +949,19 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                     <div className="text-center py-12">
                       <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                       <p className="text-muted-foreground mb-4">Connect wallet to view job requests</p>
-                      <Button
-                        onClick={() => toast.info("Please use the wallet button in the top navigation to connect")}
-                        className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                      >
-                        <Wallet className="w-4 h-4 mr-2" />
-                        Connect Wallet
-                      </Button>
-                    </div>
+                          <Button
+                            onClick={() => toast.info("Please use the wallet button in the top navigation to connect")}
+                            className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                          >
+                            <Wallet className="w-4 h-4 mr-2" />
+                            Connect Wallet
+                          </Button>
+                        </div>
                   ) : loadingJobs ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00E0FF] mx-auto mb-3"></div>
                       <p className="text-muted-foreground">Loading job requests...</p>
-                    </div>
+                      </div>
                   ) : encryptedJobs.length === 0 && projectJobs.length === 0 ? (
                     <div className="text-center py-8">
                       <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
@@ -978,62 +981,62 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                     <>
                       {/* Show decrypted jobs */}
                       {projectJobs.map((job) => (
-                        <div
-                          key={job.id}
+                    <div
+                      key={job.id}
                           className="p-4 rounded-lg border border-border hover:border-[#00E0FF]/30 transition-all group"
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <h4 className="text-foreground group-hover:text-[#00E0FF] transition-colors">
-                                  {job.title}
-                                </h4>
-                                <Badge className={getStatusColor(job.status)}>
-                                  {job.status}
-                                </Badge>
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="text-foreground group-hover:text-[#00E0FF] transition-colors">
+                              {job.title}
+                            </h4>
+                            <Badge className={getStatusColor(job.status)}>
+                              {job.status}
+                            </Badge>
                                 <Badge className="bg-[#00FFA3]/20 text-[#00FFA3] border-[#00FFA3]/30">
                                   Decrypted
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                <div className="flex items-center gap-1">
-                                  {getCategoryIcon(job.category)}
-                                  <span>{job.category}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Users className="w-3 h-3" />
-                                  <span>{job.applicants} applicants</span>
-                                </div>
-                              </div>
-                            </div>
+                            </Badge>
                           </div>
-                          <div className="flex items-center justify-between pt-2 border-t border-border">
-                            <div>
-                              <div className="text-lg text-[#00E0FF]">
-                                {formatCurrency(job.budget)}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Due {new Date(job.deadline).toLocaleDateString()}
-                              </div>
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              {getCategoryIcon(job.category)}
+                              <span>{job.category}</span>
                             </div>
-                            {job.status === "Open" && (
-                              <Button 
-                                size="sm"
-                                onClick={() => handleApplyClick(job)}
-                                className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] h-8 text-xs"
-                              >
-                                Apply
-                                <ExternalLink className="w-3 h-3 ml-1" />
-                              </Button>
-                            )}
+                            <div className="flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              <span>{job.applicants} applicants</span>
+                            </div>
                           </div>
                         </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-border">
+                        <div>
+                          <div className="text-lg text-[#00E0FF]">
+                            {formatCurrency(job.budget)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Due {new Date(job.deadline).toLocaleDateString()}
+                          </div>
+                        </div>
+                        {job.status === "Open" && (
+                          <Button 
+                            size="sm"
+                            onClick={() => handleApplyClick(job)}
+                            className="bg-gradient-to-r from-[#00E0FF] to-[#C04BFF] hover:opacity-90 text-[#0D0E10] h-8 text-xs"
+                          >
+                            Apply
+                            <ExternalLink className="w-3 h-3 ml-1" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                       ))}
                       
                       {/* Show encrypted jobs */}
                       {encryptedJobs.map((encJob, idx) => {
                         const jobId = encJob.fields?.id?.id;
-                        const isDecrypted = projectJobs.some(j => j.id.toString().includes(jobId?.slice(-8) || ''));
+                        const isDecrypted = projectJobs.some(j => j.blockchainJobId === jobId);
                         const isDecrypting = decryptingJobId === jobId;
                         
                         // Skip if already decrypted
@@ -1042,36 +1045,53 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
                         return (
                           <div
                             key={jobId || idx}
-                            className="p-4 rounded-lg border border-[#FF6B00]/30 bg-card/50 backdrop-blur-sm relative"
+                            className="rounded-lg border border-[#FF6B00]/30 bg-card/50 backdrop-blur-sm hover:border-[#FF6B00]/50 transition-all overflow-hidden"
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <Lock className="w-5 h-5 text-[#FF6B00]" />
-                                <div>
-                                  <h4 className="text-foreground mb-1">Encrypted Job Request #{idx + 1}</h4>
+                            <div className="p-4 space-y-3">
+                              {/* Job Header */}
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Lock className="w-4 h-4 text-[#FF6B00]" />
+                                    <h4 className="text-foreground">Encrypted Job Request #{idx + 1}</h4>
+                                    <Badge className="bg-[#FF6B00]/20 text-[#FF6B00] border-[#FF6B00]/30">
+                                      🔒 Locked
+                                    </Badge>
+                                  </div>
                                   <p className="text-sm text-muted-foreground">
-                                    Click decrypt to view full details
+                                    Connect your wallet and decrypt to view job details
                                   </p>
                                 </div>
                               </div>
-                              <Button
-                                size="sm"
-                                onClick={() => handleDecryptJob(encJob)}
-                                disabled={isDecrypting}
-                                className="bg-gradient-to-r from-[#FF6B00] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
-                              >
-                                {isDecrypting ? (
-                                  <>
-                                    <Lock className="w-4 h-4 mr-2 animate-pulse" />
-                                    Decrypting...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Lock className="w-4 h-4 mr-2" />
-                                    Decrypt
-                                  </>
-                                )}
-                              </Button>
+
+                              {/* Encrypted Notice */}
+                              <div className="p-3 bg-[#FF6B00]/5 border border-[#FF6B00]/20 rounded-lg">
+                                <p className="text-sm text-muted-foreground">
+                                  🔒 Job title, description, budget, and other details are encrypted. Click "Decrypt" to view full information.
+                                </p>
+                              </div>
+
+                              {/* Decrypt Button */}
+                              <div className="flex items-center justify-center pt-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleDecryptJob(encJob)}
+                                  disabled={isDecrypting}
+                                  className="bg-gradient-to-r from-[#FF6B00] to-[#C04BFF] hover:opacity-90 text-[#0D0E10]"
+                                >
+                                  {isDecrypting ? (
+                                    <>
+                                      <Lock className="w-4 h-4 mr-2 animate-pulse" />
+                                      Decrypting...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Lock className="w-4 h-4 mr-2" />
+                                      Decrypt
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -1110,6 +1130,7 @@ export function ProjectDetailsPage({ project, onBack }: ProjectDetailsPageProps)
         open={showJobApplicationDialog}
         onOpenChange={setShowJobApplicationDialog}
         job={selectedJob}
+        projectId={project.id}
         onSubmit={handleApplicationSubmit}
       />
     </div>

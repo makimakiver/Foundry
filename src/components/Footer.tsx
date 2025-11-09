@@ -33,9 +33,9 @@ export function Footer() {
     },
     { 
       icon: Github, 
-      href: "https://github.com/makimakiver/Foundry", 
+      href: "https://github.com/makimakiver/Foundry3", 
       label: "GitHub",
-      username: "foundry3",
+      username: "makimakiver",
       color: "hover:text-[#C04BFF] hover:bg-[#C04BFF]/10"
     },
     { 

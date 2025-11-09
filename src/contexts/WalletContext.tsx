@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface WalletContextType {
   isConnected: boolean;

@@ -26,22 +26,22 @@ export function Footer() {
   const social = [
     { 
       icon: Twitter, 
-      href: "https://twitter.com/foundry3", 
+      href: "https://twitter.com/foundrysui", 
       label: "Twitter",
-      username: "@foundry3",
+      username: "@foundrysui",
       color: "hover:text-[#1DA1F2] hover:bg-[#1DA1F2]/10"
     },
     { 
       icon: Github, 
-      href: "https://github.com/foundry3", 
+      href: "https://github.com/makimakiver/Foundry", 
       label: "GitHub",
       username: "foundry3",
       color: "hover:text-[#C04BFF] hover:bg-[#C04BFF]/10"
     },
     { 
       icon: MessageCircle, 
-      href: "https://discord.gg/foundry3", 
-      label: "Discord",
+      href: "https://t.me/+4MDbMciKMYsxNTBk", 
+      label: "Telegram",
       username: "Join Server",
       color: "hover:text-[#5865F2] hover:bg-[#5865F2]/10"
     },

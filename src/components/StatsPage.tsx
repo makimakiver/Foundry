@@ -2668,6 +2668,11 @@ export function StatsPage() {
         onOpenChange={setShowCompleteJobDialog}
         job={selectedJobForCompletion}
         projectId={selectedProjectBlockchainIdForCompletion || selectedJobForCompletion?.projectId || ""}
+        projectName={
+          selectedProjectForCompletion !== null
+            ? userProjects.find(p => p.id === selectedProjectForCompletion)?.name || ""
+            : ""
+        }
         applications={(selectedJobForCompletion ? jobApplications[selectedJobForCompletion.id] || [] : []).map(app => ({
           id: app.id,
           applicantName: app.name,

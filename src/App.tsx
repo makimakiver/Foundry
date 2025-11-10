@@ -4,6 +4,7 @@ import { ProjectsPage } from "./components/ProjectsPage";
 import { LaunchProjectPage } from "./components/LaunchProjectPage";
 import { StatsPage } from "./components/StatsPage";
 import { ProjectDetailsPage } from "./components/ProjectDetailsPage";
+import { ProfilePage } from "./components/ProfilePage";
 import { Footer } from "./components/Footer";
 import { Toaster } from "./components/ui/sonner";
 // Removed custom WalletProvider in favor of @mysten/dapp-kit
@@ -11,7 +12,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { toast } from "sonner@2.0.3";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { alliance } from '../fonts';
-type Page = "projects" | "launch" | "stats" | "project-details";
+type Page = "projects" | "launch" | "stats" | "project-details" | "profile";
 
 interface Project {
   id: string;
@@ -66,6 +67,9 @@ function AppContent() {
         )}
         {currentPage === "stats" && (
           <StatsPage />
+        )}
+        {currentPage === "profile" && (
+          <ProfilePage />
         )}
         {currentPage === "project-details" && selectedProject && (
           <ProjectDetailsPage 

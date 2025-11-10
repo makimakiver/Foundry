@@ -16,7 +16,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 
 interface Application {
@@ -46,6 +46,7 @@ interface CompleteJobDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
+  projectName?: string;
   job: Job | null;
   applications: Application[];
   onComplete: (jobId: string, completionData: {
@@ -61,12 +62,15 @@ export function CompleteJobDialog({
   job,
   applications,
   projectId,
+  projectName,
   onComplete,
 }: CompleteJobDialogProps) {
   const client = useSuiClient();
   const vendor = import.meta.env.VITE_PACKAGE_ID;
   const registry = import.meta.env.VITE_REGISTRY_ID;
+  const account = useCurrentAccount();
   console.log('Project ID:', projectId);
+  if (projectName) console.log('Project Name:', projectName);
   const account_ns_reg = import.meta.env.VITE_ACCOUNT_NS_REGISTRY_ID;
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const [selectedApplicantId, setSelectedApplicantId] = useState<string | undefined>(undefined);
@@ -109,7 +113,6 @@ export function CompleteJobDialog({
 
     try {
       // Build transaction
-      const tx = new Transaction();
       
       // Find the applicant's wallet address from selectedApplicantId
       let applicantAddress: string | undefined;
@@ -124,9 +127,76 @@ export function CompleteJobDialog({
           console.warn('Could not find wallet address for applicant:', selectedApplicantId);
         }
       }
-
+      
       if (finalStatus === "Completed" && selectedApplicantId && applicantAddress) {
+        const subnamePkg = import.meta.env.VITE_SUINS_SUBDOMAIN_PACKAGE_ID;
+        const subname_proxyPkg = import.meta.env.VITE_SUINS_SUBDOMAIN_PROXY_PACKAGE_ID;
+        const suinsShared = import.meta.env.VITE_SUINS_SHARED_OBJECT_ID;
+        const clockId = '0x6';
         // Complete job with selected applicant
+        const tx = new Transaction();
+
+        console.log('[1] building moveCall…');
+ 
+        console.log('[2] transfer to receiver…');
+        const subName       = projectName + '.foundry.sui';
+        const job_subdomain = job.category + '.' + subName;
+        const expirationMs  = 1792963031733;
+        // Resolve parentNftId from user's SuinsRegistration that matches projectName.foundry.sui
+        if (!account?.address) {
+          toast.error('Wallet not connected');
+          return;
+        }
+        const owned = await client.getOwnedObjects({
+          owner: projectId,
+          options: { showContent: true, showType: true },
+        });
+        console.log('Owned objects for account:', owned);
+        const parentReg = owned.data[0];
+        if (!parentReg) {
+          console.warn('SuinsRegistration not found for', subName);
+          toast.error(`Suins registration not found for ${subName}`);
+          return;
+        }
+        // const parentNftId = parentReg?.data?.content?.fields?.id?.id;
+
+        // console.log('Resolved parentNftId from SuinsRegistration:', parentNftId);
+        // console.log('[1] building moveCall…');
+        // const subnameNft = tx.moveCall({
+        //   target: `${subnamePkg}::subdomains::new`,
+        //   arguments: [
+        //     tx.object(suinsShared),       // shared object
+        //     tx.object(parentNftId),       // must be owned by sender or have the required cap
+        //     tx.object(clockId),
+        //     tx.pure.string(job_subdomain),
+        //     tx.pure.u64(expirationMs),    // check units: ms vs sec
+        //     tx.pure.bool(true),
+        //     tx.pure.bool(true),
+        //   ],
+        // });
+        // let i = 0;
+        // for (const applicant of acceptedApplications) {
+        //   const applicantAddress = applicant.walletAddress;
+        //   if (!applicantAddress) {
+        //     console.warn('Could not find wallet address for applicant:', applicant.id);
+        //     continue;
+        //   }
+        //   const applicantSubname = 'contributor' + '-' + i + '.' + job_subdomain;
+        //   const applicantAddressNft = tx.moveCall({
+        //     target: `${subname_proxyPkg}::subdomain_proxy::new`,
+        //     arguments: [
+        //       tx.object(suinsShared),       // shared object
+        //       tx.object(subnameNft),       // must be owned by sender or have the required cap
+        //       tx.object(clockId),
+        //       tx.pure.string(applicantSubname),
+        //       tx.pure.u64(1792963031733),    // check units: ms vs sec
+        //       tx.pure.bool(true),
+        //       tx.pure.bool(false),
+        //     ],
+        //   });
+        //   tx.transferObjects([applicantAddressNft], tx.pure.address(applicantAddress));
+        //   i++;
+        // }
         tx.moveCall({
           target: `${vendor}::ideation::complete_job`,
           arguments: [
@@ -135,11 +205,11 @@ export function CompleteJobDialog({
             tx.object(blockchainJobId)
           ],
         });
+        toast.loading('Submitting job completion to blockchain...');
+        const result = await signAndExecuteTransaction({ transaction: tx });
+        console.log('Job completion transaction successful:', result);
       }
 
-      toast.loading('Submitting job completion to blockchain...');
-      const result = await signAndExecuteTransaction({ transaction: tx });
-      console.log('Job completion transaction successful:', result);
 
       // Call the callback to update local state
       onComplete(blockchainJobId, {

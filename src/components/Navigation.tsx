@@ -5,7 +5,7 @@ import { WalletButton } from "./WalletButton";
 import { useTheme } from "../contexts/ThemeContext";
 import { Button } from "./ui/button";
 
-type Page = "projects" | "launch" | "stats";
+type Page = "projects" | "launch" | "stats" | "profile";
 
 interface NavigationProps {
   onNavigate: (page: Page) => void;
@@ -51,6 +51,12 @@ export function Navigation({ onNavigate }: NavigationProps) {
               className="text-[16px] font-semibold text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
             >
               My Projects
+            </button>
+            <button 
+              onClick={() => onNavigate("profile")}
+              className="text-[16px] font-semibold text-muted-foreground hover:text-foreground transition-colors tracking-[-0.3125px]"
+            >
+              Profile
             </button>
             <button 
               onClick={() => onNavigate("launch")}

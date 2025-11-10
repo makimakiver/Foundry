@@ -39,6 +39,7 @@ import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { uploadImageToPinata, isPinataConfigured } from "../lib/pinata";
+import { calculateGasCosts } from "../lib/gas-calculation";
 
 interface ProjectFormData {
   name: string;
@@ -160,7 +161,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
     }
     
     const nameRecord = await suinsClient.getNameRecord(data.name + ".sui");
-    console.log(nameRecord);
+    console.log('Name Record:', nameRecord);
     if(nameRecord) {
       const owner = await client.getObject({
         id: nameRecord.nftId,
@@ -168,13 +169,19 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
           showOwner: true
         }
       });
-      const address = owner?.data?.owner?.AddressOwner;
+      console.log('Owner:', owner);
+      const ownerData = owner?.data?.owner;
+      const address = typeof ownerData === 'object' && ownerData !== null && 'AddressOwner' in ownerData 
+        ? (ownerData as any).AddressOwner 
+        : typeof ownerData === 'string' ? ownerData : null;
+      console.log('Address:', address);
       if (address == currentAccount.address) {
         toast.dismiss();
         toast.success('Scam test is passed successfully!');
       }
       else{
         toast.error('Scam test is failed!');
+        return;
       }
     }
     
@@ -257,193 +264,150 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
       
       toast.dismiss();
       toast.success('Metadata uploaded successfully!');
-      
-      // ========================================================================
-      // Step 3: MANDATORY SuiNS Registration (CRITICAL - Project submission depends on this)
-      // ========================================================================
-      // If SuiNS registration fails, the entire project submission will be cancelled
-      // to prevent InvalidBCSBytes errors and ensure data consistency
-      
-      console.log('========================================');
-      console.log('STEP 3: MANDATORY SuiNS REGISTRATION');
-      console.log('========================================');
-      
-      // Extract founder address from connected account
-      const founderAddress = currentAccount?.address;
-      
-      // Pre-submission validation: Ensure founder address is available
-      if (!founderAddress || typeof founderAddress !== 'string' || founderAddress.trim().length === 0) {
-        const errorMsg = 'Wallet address is not available. Please ensure your wallet is properly connected before submitting a project.';
-        console.error('❌ CRITICAL ERROR:', errorMsg);
-        console.error('   Current Account:', currentAccount);
-        console.error('   Founder Address:', founderAddress);
+        // Step 1: Calculate gas costs for admin transactions (client-side)
+        toast.loading('Calculating gas costs...');
+        
+        const gasEstimates = await calculateGasCosts(
+          client,
+          data.name
+        );
+        
+        const offchainGas = gasEstimates.offchainGas;
+        const projectSignerGas = gasEstimates.projectSignerGas;
+        const holderGas = gasEstimates.holderGas;
+        
+        console.log('💰 Gas Estimates (Client-Side):');
+        console.log('  Offchain:', offchainGas.toString(), 'MIST');
+        console.log('  Project Signer:', projectSignerGas.toString(), 'MIST');
+        console.log('  Holder:', holderGas.toString(), 'MIST');
+        console.log('  Total:', gasEstimates.totalSui, 'SUI');
+        
+        // Step 2: Create project and distribute gas tokens (user transaction)
         toast.dismiss();
-        toast.error('Wallet not connected properly. Please reconnect your wallet and try again.');
-        return; // STOP - Cannot proceed without wallet address
-      }
-      
-      // Validate project name
-      const projectName = data.name;
-      if (!projectName || projectName.trim().length === 0) {
-        const errorMsg = 'Project name is required for SuiNS registration and project submission.';
-        console.error('❌ CRITICAL ERROR:', errorMsg);
-        toast.dismiss();
-        toast.error('Project name is required. Please provide a project name.');
-        return; // STOP - Cannot proceed without project name
-      }
-      
-      // Log pre-registration details
-      console.log('Pre-Registration Validation:');
-      console.log('  ✓ Project Name:', projectName);
-      console.log('  ✓ Founder Address:', founderAddress);
-      console.log('  ✓ SuinsClient:', suinsClient ? 'Initialized' : 'Missing');
-      console.log('  ✓ Blob Object ID:', blob_objectId);
-      
-      // Call SuiNS registration function with validated parameters
-      console.log('Calling handleSuiNameRegistration...');
-      console.log('Parameters being passed:');
-      console.log('  - projectName:', projectName, '(type:', typeof projectName, ')');
-      console.log('  - founderAddress:', founderAddress, '(type:', typeof founderAddress, ')');
-      console.log('  - suinsClient:', suinsClient);
-      console.log('  - signAndExecuteTransaction:', typeof signAndExecuteTransaction);
-      console.log('  - client:', client);
-      
-      const tx = new Transaction();
-      try {
-        const subName       = data.name + '.foundry.sui';
-        const founder_subdomain = 'founder.' + subName;
-        const expirationMs  = 1792963031733;
-        ; // ensure the Move fn expects ms; if seconds, divide by 1000n
-
-        // One TX only
-
-        console.log('[1] building moveCall…');
-        const subnameNft = tx.moveCall({
-          target: `${subnamePkg}::subdomains::new`,
-          arguments: [
-            tx.object(suinsShared),       // shared object
-            tx.object(parentNftId),       // must be owned by sender or have the required cap
-            tx.object(clockId),
-            tx.pure.string(subName),
-            tx.pure.u64(expirationMs),    // check units: ms vs sec
-            tx.pure.bool(true),
-            tx.pure.bool(true),
-          ],
-        });
-        console.log('[2] transfer to receiver…');
-        const extrasubnameNft = tx.moveCall({
-          target: `${subname_proxyPkg}::subdomain_proxy::new`,
-          arguments: [
-            tx.object(suinsShared),       // shared object
-            tx.object(subnameNft),       // must be owned by sender or have the required cap
-            tx.object(clockId),
-            tx.pure.string(founder_subdomain),
-            tx.pure.u64(1792963031733),    // check units: ms vs sec
-            tx.pure.bool(true),
-            tx.pure.bool(false),
-          ],
-        });
-        tx.moveCall({
-          target: `${vendor}::ideation::add_job_identity_info`,
-          arguments: [
-            tx.object(account_ns_reg),       // shared object
-            tx.object(extrasubnameNft),      // must be owned by sender or have the required cap
-            tx.pure.address(founderAddress!),
-          ],
-        });
-        tx.transferObjects([extrasubnameNft], tx.pure.address(founderAddress!));
-        console.log('[2] transfer to receiver…');
-        console.log(data.teamMembers)
-        if (data.teamMembers.length > 0 && data.teamMembers[0].name !== ''){
-          console.log('hello')
-          for (const member of data.teamMembers) {
-            const memberSubname = member.role+'.'+subName;
-            const memberSubnameNft = tx.moveCall({
-              target: `${subname_proxyPkg}::subdomain_proxy::new`,
-              arguments: [
-                tx.object(suinsShared),       // shared object
-                tx.object(subnameNft),       // must be owned by sender or have the required cap
-                tx.object(clockId),
-                tx.pure.string(memberSubname),
-                tx.pure.u64(1792963031733),    // check units: ms vs sec
-                tx.pure.bool(true),
-                tx.pure.bool(false),
-              ],
-            });
-            tx.moveCall({
-              target: `${vendor}::ideation::add_job_identity_info`,
-              arguments: [
-                tx.object(account_ns_reg),       // shared object
-                tx.object(memberSubnameNft),      // must be owned by sender or have the required cap
-                tx.pure.address(member.name),
-              ],
-            });
-            tx.transferObjects([memberSubnameNft], tx.pure.address(member.name));
-          }
-        }
-        toast.dismiss();
-        toast.success('Subdomain is transferred successfully!');
-        // ========================================================================
-        // SUCCESS: SuiNS registration completed successfully
-        // ========================================================================
-        console.log('========================================');
-        console.log('✅ SUINS REGISTRATION SUCCESSFUL');
-        console.log('========================================');
-        console.log('  Proceeding with project submission...');
-        console.log('========================================');
-        console.log('[3] calling create_project...');
-        const project_address = tx.moveCall({
+        toast.loading('Creating project and funding admin accounts...');
+        
+        const tx = new Transaction();
+        const offchain_sender = import.meta.env.VITE_OFFCCHAIN_ACC || '0x39c26ec565ee7e77ef666c030b9201de0047fabc3a8301e43007a8e31e8036b2';
+        const holder_address = import.meta.env.VITE_HOLDER_ACC || '0x7e3617928ec1ea5a316954e0f207fe27c6733513d65d21f366ae3ae907d877cb';
+        
+        // Generate temporary project signer address (will be generated server-side, but we need a placeholder)
+        // The server will generate the actual keypair, we just need to allocate gas
+        // We'll send gas to offchain which will then distribute to project_signer
+        
+        // Transfer gas to offchain account (will mint creation cap)
+        console.log(`💸 Transferring ${offchainGas} MIST to offchain account...`);
+        const [offchainCoin] = tx.splitCoins(tx.gas, [offchainGas]);
+        tx.transferObjects([offchainCoin], offchain_sender);
+        
+        // Transfer gas to holder account (will create SuiNS NFTs)
+        console.log(`💸 Transferring ${holderGas} MIST to holder account...`);
+        const [holderCoin] = tx.splitCoins(tx.gas, [holderGas]);
+        tx.transferObjects([holderCoin], holder_address);
+        
+        // Note: project_signer gas will be sent by server after generating the keypair
+        // For now, we add extra to offchain to cover this
+        const extraForProjectSigner = projectSignerGas;
+        const [extraCoin] = tx.splitCoins(tx.gas, [extraForProjectSigner]);
+        tx.transferObjects([extraCoin], offchain_sender);
+        
+        // Create the project
+        const project = tx.moveCall({
           target: `${vendor}::ideation::create_project`,
           arguments: [
             tx.object(registry),
-            tx.pure.string(data.name),           // Original project name
-            tx.object(blob_objectId),           // SuiNS name (e.g., "my-project.sui")
+            tx.pure.string(data.name),
+            tx.object(blob_objectId),
             tx.pure.string(data.image || ''),
             tx.pure.u64(data.fundingGoal),
             tx.pure.string(data.category || '')
           ]
         });
-        tx.transferObjects([subnameNft], project_address); // transfer it to the project
-        signAndExecuteTransaction({ transaction: tx });
-        toast.dismiss();
-        toast.success('Project submitted successfully');
-        onProjectSubmitted();
-      }
-      // ========================================================================
-      // CRITICAL EXIT POINT: Enforce mandatory SuiNS registration
-      // ========================================================================
-      catch(error) {
-        console.error('========================================');
-        console.error('❌ SUINS REGISTRATION FAILED');
-        console.error('========================================');
-        console.error('Project submission CANCELLED to prevent data inconsistency');
-        console.error('Error details:', error);
-        console.error('========================================');
         
-        toast.dismiss();
-        toast.error(
-          `Project submission cancelled: SuiNS registration failed. ${error || 'Please try again.'}`,
-          { duration: 6000 }
+        tx.transferObjects([project], offchain_sender);
+        
+        const createResult = await signAndExecuteTransaction({ 
+          transaction: tx
+        });
+        
+        console.log('✅ Project created on-chain:', createResult.digest);
+        
+        // Wait for transaction and get full details
+        const txDetails = await client.waitForTransaction({
+          digest: createResult.digest,
+          options: { showEffects: true, showObjectChanges: true }
+        });
+        
+        // Extract project object ID from transaction result
+        const createdObjects = txDetails.objectChanges?.filter(
+          (change: any) => change.type === 'created'
+        ) || [];
+        
+        const projectObject = createdObjects.find(
+          (change: any) => {
+            const objectType = change.objectType || '';
+            // Get the first created object - adjust filter if needed
+            return objectType.includes('::ideation::Project') && !objectType.includes('::ideation::ProjectCap');
+          }
         );
         
-        // STOP - Do not proceed with project submission
-        return;
-      }
-      
-      
-      // Split coins for funding goal
-      // const [coin] = tx.splitCoins(tx.gas, [data.fundingGoal]);
-      
-      // Call the smart contract to register the project
-      // Note: This assumes the smart contract has been updated to accept the SuiNS name parameter
-      // If the contract hasn't been updated yet, you'll need to update it to accept this additional parameter
-      // const tx = new Transaction();
+        if (!projectObject || !('objectId' in projectObject)) {
+          throw new Error('Failed to extract project object ID from transaction');
+        }
+        
+        const projectObjectId = (projectObject as any).objectId;
+        console.log('📦 Project Object ID:', projectObjectId);
+        
+        toast.dismiss();
+        toast.loading('Processing admin transactions on server...');
+        
+        // Step 2: Call server to handle admin transactions (creation cap, seal, etc.)
+        const serverResponse = await fetch('http://localhost:3001/api/create-project', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            projectObjectId,
+            subName: data.name + '.foundry.sui',
+            expirationMs: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year from now
+            userAddress: currentAccount.address,
+            projectSignerGasFund: projectSignerGas.toString() // Send gas amount for project_signer
+          }),
+        });
+        
+        if (!serverResponse.ok) {
+          let errorMessage = `Server error: ${serverResponse.status} ${serverResponse.statusText}`;
+          try {
+            const errorData = await serverResponse.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (jsonError) {
+            console.error('Could not parse error response as JSON');
+          }
+          throw new Error(errorMessage);
+        }
+        
+        const serverResult = await serverResponse.json();
+        console.log('✅ Server processing complete:', serverResult);
+        
+        toast.dismiss();
+        toast.success('🎉 Project submitted successfully!');
+        console.log('========================================');
+        console.log('✅ COMPLETE PROJECT CREATION SUCCESS');
+        console.log('========================================');
+        console.log('Project Object ID:', projectObjectId);
+        console.log('Creation Cap ID:', serverResult.data?.creationCapId);
+        console.log('Transaction Digests:', {
+          projectCreation: createResult.digest,
+          ...serverResult.data?.transactions
+        });
+        console.log('========================================');
+        
+        onProjectSubmitted();
       
     } catch (error) {
       console.error('Error during project submission:', error);
       toast.dismiss();
       toast.error(error instanceof Error ? error.message : 'An unexpected error occurred');
-
     }
   };
 

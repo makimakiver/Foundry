@@ -40,10 +40,12 @@ module vendor3::ideation {
         open: bool,
         supporters: vector<address>,
         currentfunding: u64,
-        category: String
+        category: String,
+        // roles: vector<String>,
+        // roles_num: Table<String, u64>
     }
 
-    public struct ProjectCap has key {
+    public struct ProjectCap has key, store {
         id: UID,
         project_id: ID
     }
@@ -83,6 +85,12 @@ module vendor3::ideation {
     public struct JobVault has key, store {
         id: UID,
         jobs: vector<Job>
+    }
+
+    public struct WrappedRole has key {
+        id: UID,
+        role: String,
+        role_ns: SuinsRegistration
     }
 
     // --- Private functions
@@ -316,17 +324,17 @@ module vendor3::ideation {
     public fun get_accessible_projects(self: &Registry, ctx: &TxContext): vector<ID> {
         *self.accessible_project.borrow(ctx.sender())
     }
-    public fun create_project(self: &mut Registry, title: String, details: Blob, image_url: String, funding_goal: u64, category: String, ctx: &mut TxContext): address {
+
+    #[allow(lint(self_transfer))]
+    public fun create_project(self: &mut Registry, title: String, details: Blob, image_url: String, funding_goal: u64, category: String, ctx: &mut TxContext): Project {
         let project = mint_project(title, details, funding_goal, image_url, category, ctx);
         self.add_address_to_project_id(&project, ctx);
-        let project_addr = project.id.to_address();
         let vault = mint_job_vault(ctx);
         let cap = mint_project_owner_cap(&project, ctx);
         self.project_jobs.add<ID, JobVault>(project.id.to_inner(), vault);
         self.projects.push_back(project.id.to_inner());
-        transfer::transfer(cap, ctx.sender());
-        transfer::share_object(project);
-        project_addr
+        transfer::public_transfer(cap, ctx.sender());
+        project
     }
 
     #[allow(lint(self_transfer))]

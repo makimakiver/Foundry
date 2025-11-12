@@ -371,6 +371,7 @@ export function LaunchProjectPage({ onProjectSubmitted }: LaunchProjectPageProps
             subName: data.name + '.foundry.sui',
             expirationMs: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year from now
             userAddress: currentAccount.address,
+            teamMembers: data.teamMembers || [], // Pass team members with roles
             projectSignerGasFund: projectSignerGas.toString() // Send gas amount for project_signer
           }),
         });

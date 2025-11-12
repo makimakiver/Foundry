@@ -1,6 +1,6 @@
 module vendor3::ideation {
     // --- imports
-    use std::string::String;
+    use std::string::{Self, String};
     use std::macros::range_do;
     use sui::table::{Self, Table};
     use usdc::usdc::{USDC};
@@ -11,10 +11,12 @@ module vendor3::ideation {
     use sui::dynamic_object_field as dof;
     use suins::suins_registration::{SuinsRegistration};
     use suins::subdomain_registration::{SubDomainRegistration};
+    use suins_temp_subdomain_proxy::subdomain_proxy;
     use vendor3::contribution::{Self, Application};
     use vendor3::suins_util;
-    use walrus::blob::{Blob};
     use sui::coin::from_balance;
+    use walrus::blob::{Blob};
+    use suins::suins::SuiNS;
 
     // ---Enum
     public enum State has copy, drop, store {
@@ -41,8 +43,8 @@ module vendor3::ideation {
         supporters: vector<address>,
         currentfunding: u64,
         category: String,
-        // roles: vector<String>,
-        // roles_num: Table<String, u64>
+        roles: vector<String>,
+        roles_num: Table<String, u64>
     }
 
     public struct ProjectCap has key, store {
@@ -131,7 +133,9 @@ module vendor3::ideation {
             open: true,
             supporters: vector::singleton(ctx.sender()),
             currentfunding: 0,
-            category
+            category,
+            roles: vector::empty(),
+            roles_num: table::new<String, u64>(ctx)
         };
         idea
     }
@@ -157,7 +161,7 @@ module vendor3::ideation {
         cap
     }
 
-    fun mint_requirement(
+    public(package) fun mint_requirement(
         role: vector<String>,
         role_amount: vector<u64>,
         org: vector<String>,
@@ -180,7 +184,32 @@ module vendor3::ideation {
         requirement
     }
 
-    fun find_job_index(id: ID, vault: &JobVault): u64 {
+    public(package) fun mint_job(
+        self: Requirement,
+        details: vector<u8>,
+        validator: address,
+        category: u64,
+        coin: Coin<USDC>,
+        max_people: u64,
+        ctx: &mut TxContext
+    ): Job {
+      let job = Job {
+            id: object::new(ctx),
+            validator,
+            details,
+            state: State::Hiring,
+            category,
+            prize_pool: coin.into_balance(),
+            requirement: self,
+            applicants: vector::empty<address>(),
+            applications: table::new<address, Application>(ctx),
+            selected: vector::empty<address>(),
+            num_workers: max_people
+        };
+        job
+    }
+
+    public(package) fun find_job_index(id: ID, vault: &JobVault): u64 {
         let len = vault.jobs.length();
         let mut i = 0;
         while (i < len) {
@@ -189,7 +218,7 @@ module vendor3::ideation {
         };
         abort 0
     }
-    // --- Entry function
+    // --- Entry function 
     entry fun seal_approve(id: vector<u8>, aggregator: &Registry, project: &Project, job_id: ID, registry: &AccountNSRegistry, ctx: &TxContext){
         let vault = aggregator.project_jobs.borrow(project.id.to_inner());
         let job_idx = find_job_index(job_id, vault);
@@ -241,18 +270,6 @@ module vendor3::ideation {
         }
     }
 
-    // submitting the application to job request
-    entry fun submit_application(aggregator: &mut Registry, project: &Project, job_id: ID, details: Blob, clock: &Clock, ctx: &mut TxContext){
-        let vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
-        let job_idx = find_job_index(job_id, vault);
-        let job = vault.jobs.borrow_mut(job_idx);
-        assert!(!job.applicants.contains(&ctx.sender()), 0);
-        assert!(!job.applications.contains(ctx.sender()), 1);
-        let application = contribution::mint_application(details, clock, ctx);
-        job.applications.add(ctx.sender(), application);
-        job.applicants.push_back(ctx.sender());
-    }
-
     // add target to the execution team
     entry fun add_member(aggregator: &mut Registry, project: &Project, job_id: ID, target: address, ctx: &TxContext){
         let vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
@@ -266,37 +283,42 @@ module vendor3::ideation {
             job.state = State::InProgress;
         };
     }
-    // --- Public function
-    public fun create_job(
-        self: &mut Registry,
-        project: &Project,
-        details: vector<u8>,
-        role: vector<String>,
-        role_amount: vector<u64>,
-        org: vector<String>,
-        org_amount: vector<u64>,
-        validator: address,
-        category: u64,
-        coin: Coin<USDC>,
-        max_people: u64,
 
+    public fun distribute_role(
+        self: &mut Project, 
+        suins: &mut SuiNS,
+        subdomain: &SubDomainRegistration,
+        clock: &Clock,
+        targets: vector<address>, 
+        roles: &mut vector<String>, 
+        expiration_timestamp_ms: u64,
         ctx: &mut TxContext
-    ){
-        let requirement = mint_requirement(role, role_amount, org, org_amount, ctx);
-        let job = Job {
-            id: object::new(ctx),
-            validator,
-            details,
-            state: State::Hiring,
-            category,
-            prize_pool: coin.into_balance(),
-            requirement,
-            applicants: vector::empty<address>(),
-            applications: table::new<address, Application>(ctx),
-            selected: vector::empty<address>(),
-            num_workers: max_people
-        };
-        self.project_jobs.borrow_mut(project.id.to_inner()).jobs.push_back(job);
+    ) {
+        assert!(targets.length() == roles.length(), 0);
+        let base_string = subdomain.nft().domain_name();
+        range_do!(0, targets.length(), |i| {
+            let mut role_number: u64;
+            let role_ref = roles.borrow(i);
+            let role_key = *role_ref;
+            if(!self.roles_num.contains(*roles.borrow(i))) {
+                self.roles.push_back(*roles.borrow(i));
+                role_number = 0;
+                self.roles_num.add(*roles.borrow(i), role_number);
+            }
+            else {
+                role_number = *self.roles_num.borrow(*roles.borrow(i)) + 1;
+                let n_ref = self.roles_num.borrow_mut(*roles.borrow(i));
+                *n_ref = *n_ref + 1;
+                role_number = *n_ref;
+            };
+            let mut label = role_key; // we can reuse role_key as the starting string
+            string::append(&mut label, b"-".to_string());
+            string::append(&mut label, role_number.to_string());
+            string::append(&mut label, b".".to_string());
+            string::append(&mut label, base_string);
+            let role_nft = subdomain_proxy::new(suins, subdomain, clock, label, expiration_timestamp_ms, true, true, ctx);
+            transfer::public_transfer(role_nft, *targets.borrow(i));
+        });
     }
 
     public fun add_job_identity_info(
@@ -313,18 +335,74 @@ module vendor3::ideation {
         }
     }
 
-    public fun project_Id(self: &Project): ID {
+    public fun get_job_mut_applications(self: &mut Job): &mut Table<address, Application> {
+        &mut self.applications
+    }
+
+    public fun get_job_mut_applicants(self: &mut Job): &mut vector<address> {
+        &mut self.applicants
+    }  
+    
+    public fun get_job_applications(self: &Job): &Table<address, Application> {
+        &self.applications
+    }
+
+    public fun get_job_applicants(self: &Job): &vector<address> {
+        &self.applicants
+    }  
+
+    public fun get_project_id(self: &Project): ID {
         self.id.to_inner()
     }
 
-    public fun get_supporters(self: &Project): vector<address> {
+    public fun get_project_supporters(self: &Project): vector<address> {
         self.supporters
     }
     
-    public fun get_accessible_projects(self: &Registry, ctx: &TxContext): vector<ID> {
+    public fun get_registry_projects(self: &Registry, ctx: &TxContext): vector<ID> {
         *self.accessible_project.borrow(ctx.sender())
     }
 
+    public fun get_registry_project_table(self: &Registry): &Table<ID, JobVault> {
+        &self.project_jobs
+    }
+
+    public fun get_registry_mut_project_table(self: &mut Registry): &mut Table<ID, JobVault> {
+        &mut self.project_jobs
+    }
+
+    public fun get_nsregistry_registry(self: &AccountNSRegistry): &Table<address, vector<String>>{
+        &self.registry
+    }
+
+    public fun get_requirement_job(self: &Job): &Requirement {
+        &self.requirement
+    }
+
+    public fun get_requirement_role(self: &Requirement): &vector<String> {
+        &self.role
+    }
+
+    public fun get_requirement_role_amount(self: &Requirement): &vector<u64> {
+        &self.role_amount
+    }
+    
+    public fun get_requirement_org(self: &Requirement): &vector<String> {
+        &self.org
+    }
+
+    public fun get_requirement_org_amount(self: &Requirement): &vector<u64> {
+        &self.org_amount
+    }
+    
+    public fun get_vault_jobs(self: &JobVault): &vector<Job> {
+        &self.jobs
+    }
+
+    public fun get_vault_mut_jobs(self: &mut JobVault): &mut vector<Job> {
+        &mut self.jobs
+    }
+    
     #[allow(lint(self_transfer))]
     public fun create_project(self: &mut Registry, title: String, details: Blob, image_url: String, funding_goal: u64, category: String, ctx: &mut TxContext): Project {
         let project = mint_project(title, details, funding_goal, image_url, category, ctx);
@@ -337,19 +415,16 @@ module vendor3::ideation {
         project
     }
 
-    #[allow(lint(self_transfer))]
-    public fun complete_job(aggregator: &mut Registry, project: &Project, job_id: ID, ctx: &mut TxContext) {
-        let vault = aggregator.project_jobs.borrow_mut(project.id.to_inner());
-        let job_idx = find_job_index(job_id, vault);
-        let job = vault.jobs.borrow_mut(job_idx);
-        assert!(ctx.sender() == job.validator, 0);
-        let mut reward = job.prize_pool.withdraw_all();
-        job.state = State::Completed;
+     #[allow(lint(self_transfer))]
+    public(package) fun withdraw_fund(self: &mut Job, ctx: &mut TxContext){
+        assert!(ctx.sender() == self.validator, 0);
+        let mut reward = self.prize_pool.withdraw_all();
+        self.state = State::Completed;
         let reward_amount = reward.value();
-        range_do!(0, job.selected.length(), |i| {
-            let amount = reward_amount / job.selected.length();
+        range_do!(0, self.selected.length(), |i| {
+            let amount = reward_amount / self.selected.length();
             let salary = reward.split(amount);
-            transfer::public_transfer(salary.into_coin(ctx), *job.selected.borrow(i));
+            transfer::public_transfer(salary.into_coin(ctx), *self.selected.borrow(i));
         });
         transfer::public_transfer(reward.into_coin(ctx), ctx.sender());
     }

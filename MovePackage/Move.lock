@@ -2,8 +2,8 @@
 
 [move]
 version = 3
-manifest_digest = "BAA7A71168A531DC23DD0F37EF3F3A6988CBEEFFEFE605FBBCB156C8FA6E2442"
-deps_digest = "04732BFEF428F74DE262001DC455D76B909EBC394B034A9A15CC095E4BDD9CEF"
+manifest_digest = "1223EF661897DC112CF13E6414FB1EAFBF42DFB5E3873BC9339DC6401922E4B8"
+deps_digest = "8227D341C0550A37580C10FA45FE148A465225149C69D179737E0FE454AD6AEC"
 dependencies = [
   { id = "Bridge", name = "Bridge" },
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -11,7 +11,8 @@ dependencies = [
   { id = "SuiSystem", name = "SuiSystem" },
   { id = "WAL", name = "WAL" },
   { id = "Walrus", name = "Walrus" },
-  { id = "suins", name = "suins" },
+  { id = "suins_subdomains", name = "suins_subdomains" },
+  { id = "suins_temp_subdomain_proxy", name = "suins_temp_subdomain_proxy" },
   { id = "usdc", name = "usdc" },
 ]
 
@@ -82,10 +83,38 @@ dependencies = [
 
 [[move.package]]
 id = "suins"
-source = { git = "https://github.com/mystenlabs/suins-contracts/", rev = "releases/testnet/core/v2", subdir = "packages/suins" }
+source = { git = "https://github.com/mystenlabs/suins-contracts/", rev = "testnet", subdir = "packages/suins" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
+id = "suins_denylist"
+source = { git = "https://github.com/mystenlabs/suins-contracts/", rev = "testnet", subdir = "packages/denylist" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "suins", name = "suins" },
+]
+
+[[move.package]]
+id = "suins_subdomains"
+source = { git = "https://github.com/mystenlabs/suins-contracts/", rev = "testnet", subdir = "packages/subdomains" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "suins", name = "suins" },
+  { id = "suins_denylist", name = "suins_denylist" },
+]
+
+[[move.package]]
+id = "suins_temp_subdomain_proxy"
+source = { git = "https://github.com/mystenlabs/suins-contracts/", rev = "testnet", subdir = "packages/temp_subdomain_proxy" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "suins_subdomains", name = "suins_subdomains" },
 ]
 
 [[move.package]]
@@ -99,7 +128,7 @@ dependencies = [
 ]
 
 [move.toolchain-version]
-compiler-version = "1.59.0"
+compiler-version = "1.60.0"
 edition = "2024.beta"
 flavor = "sui"
 
@@ -107,6 +136,6 @@ flavor = "sui"
 
 [env.testnet]
 chain-id = "4c78adac"
-original-published-id = "0x5df51723e792d8997665212dc9c26a0bd2cb72591d7a571140e3685a6ef01bf0"
-latest-published-id = "0x5df51723e792d8997665212dc9c26a0bd2cb72591d7a571140e3685a6ef01bf0"
+original-published-id = "0xd83fbfd5d43638c9b2102aa46bd4284e7ba65a803ba29d706c485a69671cb5e6"
+latest-published-id = "0xd83fbfd5d43638c9b2102aa46bd4284e7ba65a803ba29d706c485a69671cb5e6"
 published-version = "1"

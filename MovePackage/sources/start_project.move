@@ -28,7 +28,7 @@ module vendor3::start_project {
     public fun mint_creation_cap(_: &OffChainCap, project: &Project, target: address, ctx: &mut TxContext) {
         let cap = CreationCap {
             id: object::new(ctx),
-            project_id: project.project_Id()
+            project_id: project.get_project_id()
         };
         transfer::public_transfer(cap, target);
     }
@@ -39,6 +39,6 @@ module vendor3::start_project {
     }
 
     entry fun seal_approve(id: vector<u8>, cap: &CreationCap, project: &Project) {
-        assert!(cap.project_id == project.project_Id(), 0);
+        assert!(cap.project_id == project.get_project_id(), 0);
     }
 }

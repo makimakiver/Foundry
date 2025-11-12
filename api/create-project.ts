@@ -6,14 +6,14 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { SealClient, SessionKey } from '@mysten/seal';
 import { fromHex } from '@mysten/sui/utils';
 
-// Environment variables
-const VENDOR_PACKAGE_ID = process.env.VENDOR_PACKAGE_ID || '0x5df51723e792d8997665212dc9c26a0bd2cb72591d7a571140e3685a6ef01bf0';
-const OFF_CHAIN_CAP = process.env.OFF_CHAIN_CAP || '0x79d0335f4f19f12f7eec6d6a3b3a9adaa4df1ffba8340892637a7efd63feacc3';
-const REGISTRY = process.env.REGISTRY || '0x49c1775d012c72f185bd91359dfc98cae12db1f4b7fa6c878edc62189189dee4';
-const SUBDOMAIN_PACKAGE_ID = process.env.SUBDOMAIN_PACKAGE_ID || '0x3c272bc45f9157b7818ece4f7411bdfa8af46303b071aca4e18c03119c9ff636';
-const SUBNAME_PROXY_ID = process.env.SUBNAME_PROXY_ID || '0x295a0749dae0e76126757c305f218f929df0656df66a6361f8b6c6480a943f12';
-const SUBNAME_SHARED_NFT_ID = process.env.SUBNAME_SHARED_NFT_ID || '0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3';
-const NAME_NFT = process.env.NAME_NFT || '0xb65554e77d3c489ae3f232b49106ee77e1d903a279b10bc4414e1d794465cb66';
+// Environment variables (server-side - no VITE_ prefix needed)
+const VENDOR_PACKAGE_ID = process.env.VITE_PACKAGE_ID || '0x2eb31c1ff6a0b3985dcb1ae5966596bcef9b692619ac59d2c2c67d50f315413e';
+const OFF_CHAIN_CAP = process.env.VITE_OFFCHAIN_CAP || '0x90fbe3f7402735e9f080fef0763511e04bb986d2f28316bd065542590448c255';
+const REGISTRY = process.env.VITE_REGISTRY_ID || '0x49c1775d012c72f185bd91359dfc98cae12db1f4b7fa6c878edc62189189dee4';
+const SUBDOMAIN_PACKAGE_ID = process.env.VITE_SUINS_SUBDOMAIN_PACKAGE_ID || '0x3c272bc45f9157b7818ece4f7411bdfa8af46303b071aca4e18c03119c9ff636';
+const SUBNAME_PROXY_ID = process.env.VITE_SUINS_SUBDOMAIN_PROXY_PACKAGE_ID || '0x295a0749dae0e76126757c305f218f929df0656df66a6361f8b6c6480a943f12';
+const SUBNAME_SHARED_NFT_ID = process.env.VITE_SUINS_SHARED_OBJECT_ID || '0x300369e8909b9a6464da265b9a5a9ab6fe2158a040e84e808628cde7a07ee5a3';
+const NAME_NFT = process.env.VITE_FOUNDRY_NS_ID || '0xb65554e77d3c489ae3f232b49106ee77e1d903a279b10bc4414e1d794465cb66';
 
 // Initialize Sui client
 const client = new SuiClient({ url: getFullnodeUrl('testnet') });
@@ -35,7 +35,7 @@ const sealClient = new SealClient({
 });
 
 // Encrypted holder keypair (from your project-registration.ts)
-const encrypted_objects = [0,93,245,23,35,231,146,216,153,118,101,33,45,201,194,106,11,210,203,114,89,29,122,87,17,64,227,104,90,110,240,27,240,1,1,4,245,209,74,129,169,130,20,74,228,65,205,125,100,176,144,39,241,22,164,104,189,54,231,236,164,148,247,80,89,22,35,200,1,96,104,192,172,177,151,221,219,172,212,116,106,157,231,240,37,178,237,90,91,108,27,26,180,77,173,228,66,109,20,29,162,2,84,102,183,223,92,21,181,8,103,141,81,73,106,218,138,250,176,214,247,10,1,193,6,19,18,51,130,177,184,19,16,7,3,22,74,195,210,179,184,105,75,129,129,193,63,103,25,80,0,71,101,194,63,39,3,33,164,95,221,4,212,12,204,240,242,4,1,0,143,153,180,252,224,197,76,112,60,236,75,3,141,27,36,104,176,233,79,98,52,79,48,69,94,116,151,18,38,91,235,20,82,163,91,43,193,240,37,7,50,31,173,207,57,224,83,47,13,66,231,27,83,85,14,229,116,248,83,99,131,69,237,235,71,109,57,82,181,57,121,85,133,143,134,11,183,117,22,134,80,250,127,101,48,35,162,100,93,103,67,85,205,10,110,130,4,16,126,83,140,115,31,110,15,48,211,114,141,204,95,96,250,73,222,130,180,107,50,229,133,191,224,198,10,120,171,46,129,206,71,206,100,38,133,210,189,246,113,76,121,190,159,230,169,170,228,100,113,164,30,199,10,83,82,196,245,169,59,47,146,155,105,15,99,2,86,2,171,66,36,148,2,160,142,132,142,5,72,225,50,28,172,135,217,149,141,186,28,179,160,137,254,171,184,86,118,96,113,251,118,199,206,144,10,248,98,34,26,218,95,34,197,205,180,216,167,39,249,223,174,104,154,167,188,142,51,188,50,194,68,241,144,180,63,12,223,24,153,180,175,6,170,48,192,94,100,201,149,105,166,181,144,43,129,151,35,0,86,201,62,139,24,135,139,71,54,26,54,85,144,62,240,178,207,223,132,106,224,146,244,34,255,251,238,0,138,180,252,195,201,111,144,131,153,29,23,117,219,171,184,192,39,44,226,89,1,45,213,182,81,161,76,57,35,41,207,236,249,245,191,108,66,71,124,150,1,111,156,75,49,133,23,32,87,63,195,254,120,114,184,78,63,147,86,1,0];
+const encrypted_objects = [0,216,63,191,213,212,54,56,201,178,16,42,164,107,212,40,78,123,166,90,128,59,162,157,112,108,72,90,105,103,28,181,230,1,1,4,245,209,74,129,169,130,20,74,228,65,205,125,100,176,144,39,241,22,164,104,189,54,231,236,164,148,247,80,89,22,35,200,1,96,104,192,172,177,151,221,219,172,212,116,106,157,231,240,37,178,237,90,91,108,27,26,180,77,173,228,66,109,20,29,162,2,84,102,183,223,92,21,181,8,103,141,81,73,106,218,138,250,176,214,247,10,1,193,6,19,18,51,130,177,184,19,16,7,3,22,74,195,210,179,184,105,75,129,129,193,63,103,25,80,0,71,101,194,63,39,3,33,164,95,221,4,212,12,204,240,242,4,1,0,143,68,183,30,155,141,159,13,56,182,18,106,247,89,187,91,109,145,51,29,138,31,56,79,100,225,93,3,209,214,116,80,24,114,200,137,11,2,196,213,211,222,76,175,243,79,26,212,13,113,93,163,14,205,191,124,150,68,189,44,57,147,194,19,48,92,58,218,67,230,186,217,16,229,229,211,193,193,88,26,127,240,8,133,71,49,64,111,156,18,202,65,205,51,26,20,4,135,251,183,218,12,172,202,135,42,50,72,108,179,208,172,118,212,215,87,147,104,173,60,78,155,82,83,70,40,15,136,17,231,140,116,84,206,121,55,213,158,250,128,60,210,204,199,15,97,13,170,196,80,110,204,71,237,221,243,215,65,176,13,108,6,127,169,27,9,233,174,123,145,177,22,209,62,67,74,56,49,65,57,167,39,183,66,210,168,223,119,73,97,186,152,89,12,231,62,65,9,152,200,31,68,58,225,135,129,187,199,240,34,53,97,255,33,193,86,231,186,232,41,163,22,159,24,49,236,190,242,133,199,38,15,137,123,232,154,228,218,109,91,200,146,95,107,17,205,43,227,146,95,103,161,72,140,11,196,86,0,86,140,170,6,162,232,201,164,72,107,156,144,45,119,203,244,43,33,153,107,127,108,130,24,241,17,236,0,186,134,29,93,22,107,198,220,35,59,79,56,131,211,142,225,168,221,15,245,51,45,198,181,7,142,179,232,221,90,179,67,99,177,179,4,171,173,33,220,88,192,73,82,217,204,77,233,105,68,126,241,79,208,223,222,73,53,175,1,0];
 const encryptedBytes = new Uint8Array(encrypted_objects);
 
 
@@ -67,6 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       subName, 
       expirationMs,
       userAddress,
+      teamMembers = [], // Array of { name: address, role: string }
       projectSignerGasFund // Gas amount for project_signer (optional, defaults to 10M MIST)
     } = req.body;
 
@@ -76,12 +77,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         error: 'Missing required fields: projectObjectId and subName are required' 
       });
     }
+    
+    if (!userAddress) {
+      return res.status(400).json({
+        error: 'Missing required field: userAddress is required'
+      });
+    }
 
-    console.log('========================================');
-    console.log('SERVER: Starting project creation flow');
-    console.log('========================================');
     console.log('Project Object ID:', projectObjectId);
     console.log('Subname:', subName);
+    console.log('User Address:', userAddress);
+    console.log('Team Members:', teamMembers.length);
 
     // Get private keys from environment
     const offchainSecretKey = process.env.VITE_OFFCHAIN_SECRET_KEY;
@@ -195,7 +201,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       target: `${VENDOR_PACKAGE_ID}::start_project::finish_creation_cap`,
       arguments: [tx2.object(creationCapId)],
     });
-
+    tx2.transferObjects([tx2.object(projectObjectId)], holder_address);
+    
     const result2 = await client.signAndExecuteTransaction({
       signer: keypair_project_signer,
       transaction: tx2,
@@ -209,8 +216,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (subName) {
       const expirationMs = 1792963031733;
       console.log('Step 4: Creating subname NFTs...');
+      console.log(`Creating NFTs for founder + ${teamMembers.length} team members`);
+      
       const tx3 = new Transaction();
       
+      // Create main project subdomain NFT
       const subnameNft = tx3.moveCall({
         target: `${SUBDOMAIN_PACKAGE_ID}::subdomains::new`,
         arguments: [
@@ -224,8 +234,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ],
       });
       
+      // Create founder subdomain NFT
       const founder_subdomain = 'founder.' + subName;
-      const extraSubnameNft = tx3.moveCall({
+      const founderSubnameNft = tx3.moveCall({
         target: `${SUBNAME_PROXY_ID}::subdomain_proxy::new`,
         arguments: [
           tx3.object(SUBNAME_SHARED_NFT_ID),
@@ -238,8 +249,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ],
       });
       
-      tx3.transferObjects([subnameNft], project_signer);
-      tx3.transferObjects([extraSubnameNft], userAddress);
+      
+      // Create subdomains for team members
+      if (teamMembers && teamMembers.length > 0) {
+        console.log('Creating subdomains for team members:', teamMembers);
+        
+        // Filter out empty team members and create arrays
+        const validMembers = teamMembers.filter((member: any) => 
+          member.name && member.role && 
+        member.name.trim() !== '' && member.role.trim() !== ''
+      );
+      
+      if (validMembers.length > 0) {
+        // Create separate arrays for addresses and roles
+        const memberAddresses = validMembers.map((member: any) => member.name);
+        const memberRoles = validMembers.map((member: any) => member.role);
+        
+        console.log('Member Addresses:', memberAddresses);
+        console.log('Member Roles:', memberRoles);
+        
+        // Call distribute_role with the arrays
+        tx3.moveCall({
+          target: `${VENDOR_PACKAGE_ID}::ideation::distribute_role`,
+          arguments: [
+            tx3.object(projectObjectId),
+            tx3.object(SUBNAME_SHARED_NFT_ID),
+            subnameNft,
+            tx3.object('0x6'),
+            tx3.pure.vector('address', memberAddresses),
+            tx3.pure.vector('string', memberRoles),
+            tx3.pure.u64(expirationMs)
+          ],
+        });
+        // Transfer main project NFT to project_signer
+        tx3.transferObjects([subnameNft, tx3.object(projectObjectId)], project_signer);
+        // Transfer founder NFT to user
+        tx3.transferObjects([founderSubnameNft], userAddress);
+          
+          console.log(`✅ distribute_role called for ${validMembers.length} team members`);
+        } else {
+          console.log('No valid team members to process');
+        }
+      }
 
       const result3 = await client.signAndExecuteTransaction({
         signer: holder_keypair,
@@ -248,13 +299,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       
       await client.waitForTransaction({ digest: result3.digest });
-      console.log('✅ Subname NFTs created:', result3.digest);
+      console.log('✅ All subname NFTs created:', result3.digest);
+      console.log(`✅ Created ${1 + (teamMembers?.length || 0)} subdomains total`);
     }
 
     console.log('========================================');
     console.log('✅ SERVER: Project creation completed');
     console.log('========================================');
 
+    // Calculate valid team members
+    const validMembers = teamMembers.filter((m: any) => 
+      m.name && m.role && m.name.trim() !== '' && m.role.trim() !== ''
+    );
+    
     // Return success response with keypair for frontend to use
     res.status(200).json({
       success: true,
@@ -263,9 +320,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         projectObjectId,
         creationCapId,
         projectSigner: project_signer,
-        projectSignerSecretKey: project_signer_secret, // Frontend will need this to continue
+        projectSignerSecretKey: project_signer_secret,
         holderAddress: holder_address,
         offchainSender: offchain_sender,
+        teamMembersProcessed: validMembers.length,
+        subdomainsCreated: {
+          founder: `founder.${subName}`,
+          teamMembers: validMembers.map((m: any) => `${m.role}.${subName}`)
+        },
         transactions: {
           mintCreationCap: result1.digest,
           finishCreationCap: result2.digest,

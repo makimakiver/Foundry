@@ -8,7 +8,8 @@ edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
 
 Walrus = { git = "https://github.com/MystenLabs/walrus.git", rev = "main", subdir = "testnet-contracts/walrus" }
 WAL = { git = "https://github.com/MystenLabs/walrus.git", rev = "main", subdir = "testnet-contracts/wal" }
-suins = { git = "https://github.com/mystenlabs/suins-contracts/", subdir = "packages/suins", rev = "releases/testnet/core/v2" }
+suins_subdomains = { git = "https://github.com/mystenlabs/suins-contracts/", subdir = "packages/subdomains", rev = "testnet" }
+suins_temp_subdomain_proxy = { git = "https://github.com/mystenlabs/suins-contracts/", subdir = "packages/temp_subdomain_proxy", rev = "testnet" }
 usdc = { git = "https://github.com/circlefin/stablecoin-sui.git", subdir = "packages/usdc", rev = "master" }
 
 [addresses]
